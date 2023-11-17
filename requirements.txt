@@ -1,0 +1,8 @@
+matplotlib
+numpy
+pandas
+proplot
+scipy
+scikit-image
+torch
+zuko
