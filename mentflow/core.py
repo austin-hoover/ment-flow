@@ -233,6 +233,7 @@ class MENTNN(MENTModel):
         self.entropy_estimator = entropy_estimator
         self.base = base
         if self.base is None:
+            d = self.d
             self.base = torch.distributions.Normal(loc=torch.zeros(d), scale=torch.ones(d))
 
     def sample(self, n: int) -> torch.Tensor:
