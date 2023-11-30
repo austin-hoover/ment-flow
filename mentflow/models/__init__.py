@@ -1,2 +1,2 @@
 from .ment import MENT
-from .nn import NNTransformer
+from .nn import NNGenerator

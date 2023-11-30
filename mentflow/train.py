@@ -95,7 +95,7 @@ class Monitor:
         model: MENTModel, 
         optimizer: Optional[torch.optim.Optimizer] = None, 
         lr_scheduler: Optional[Any] = None,
-        momentum: Optional[float] = 0.99,
+        momentum: Optional[float] = 0.95,
         path: Optional[str] = None,
         freq : int = 1,
     ) -> None:
@@ -119,7 +119,7 @@ class Monitor:
 
     def action(
         self, 
-        step : int, 
+        epoch : int, 
         iteration : int, 
         L: float, 
         H: float, 
@@ -138,8 +138,8 @@ class Monitor:
 
         for i in range(self.n_meas):
             self.meters["C"][i].action(float(C[i]))
-            
-        C_norm = sum(float(C[i])**2 for i in range(len(C))) ** 0.5
+
+        C_norm = sum(abs(float(C[i])) for i in range(len(C)))
         self.meters["C_norm"].action(C_norm)
 
         if L < self.best_loss:
@@ -147,7 +147,7 @@ class Monitor:
             self.best_state_dict = copy.deepcopy(self.model.state_dict())
 
         info = dict()
-        info["step"] = step
+        info["epoch"] = epoch
         info["iteration"] = iteration
         info["t"] = time_ellapsed
         info["batch_size"] = batch_size
@@ -158,12 +158,10 @@ class Monitor:
         info["mu"] = self.model.penalty_parameter
         for i in range(self.n_meas):
             info[f"C_{i:02.0f}"] = float(C[i])
-        for i in range(len(self.model.lagrange_multipliers)):
-            info[f"lambd_{i:02.0f}"] = self.model.lagrange_multipliers[i]
         self.logger.write(info)
 
-        message = "step={:02.0f} iter={:05.0f} t={:0.2f} L={:0.2e} H={:0.2e} C={:0.2e} lr={} batch={:0.2e}".format(
-            step,
+        message = "epoch={:02.0f} iter={:05.0f} t={:0.2f} L={:0.2e} H={:0.2e} C={:0.2e} lr={} batch={:0.2e}".format(
+            epoch,
             iteration,
             time_ellapsed,
             float(L),
@@ -184,7 +182,7 @@ class Monitor:
 
 
 class Trainer:
-    """"Augmented Lagrangian training for MENT-Flow model."""
+    """"Trainer for MENT-Flow model."""
     def __init__(
         self,
         model: MENTModel,
@@ -222,16 +220,16 @@ class Trainer:
             if not os.path.exists(self.checkpoint_dir):
                 os.makedirs(self.checkpoint_dir)
 
-    def get_prefix(self, step: int, iteration: int) -> str:
-        return f"{step:03.0f}_{iteration:05.0f}"
+    def get_prefix(self, epoch: int, iteration: int) -> str:
+        return f"{epoch:03.0f}_{iteration:05.0f}"
 
-    def save_checkpoint(self, step: int, iteration: int) -> None:
-        filename = f"model_{self.get_prefix(step, iteration)}.pt"
+    def save_checkpoint(self, epoch: int, iteration: int) -> None:
+        filename = f"model_{self.get_prefix(epoch, iteration)}.pt"
         filename = os.path.join(self.checkpoint_dir, filename)
         print(f"Saving file {filename}")
         self.model.save(filename)
 
-    def make_and_save_plots(self, step: int, iteration: int, save=False, **savefig_kws) -> None:
+    def make_and_save_plots(self, epoch: int, iteration: int, save=False, **savefig_kws) -> None:
         if self.plotter is None:
             return
             
@@ -241,7 +239,7 @@ class Trainer:
 
         for index, figure in enumerate(figures):
             if save:
-                filename = f"fig_{index:02.0f}_{self.get_prefix(step, iteration)}.{ext}"
+                filename = f"fig_{index:02.0f}_{self.get_prefix(epoch, iteration)}.{ext}"
                 filename = os.path.join(self.fig_dir, filename)
                 print(f"Saving file {filename}")
                 figure.savefig(filename, **savefig_kws)
@@ -251,55 +249,96 @@ class Trainer:
 
     def train(
         self,
-        steps: int = 20,
+        epochs: int = 20,
         iterations: int = 1000,
         batch_size: int = 30000,
-        rtol: float = 0.8,
-        penalty_parameter_scale: float = 2.0,
+        rtol: float = 0.05,
+        atol: float = 0.0,
+        cmax: float = 0.0,
+        penalty_parameter_step: float = 10.0,
+        penalty_parameter_scale: float = 1.0,
         penalty_parameter_max: float = None,
         save: bool = True,
         vis_freq: int = 100,
         checkpoint_freq: int = 100,
         savefig_kws: Optional[dict] = None,
     ) -> None:
+        """Train using the Penalty Method (PM).
+
+        Parameters
+        ----------
+        epochs : int
+            Number of outer iterations, i.e., penalty parameter updates.
+        iterations : int
+            Number of ADAM iterations per epoch.
+        batch_size : int
+            Number of particles sampled on each forward 
+        rtol : float
+            Stop if |C| > (1 - rtol) * |C_old|. Default = 0.05.
+        atol : float
+            Stop if |C_old| - |C| < atol. Default = 0 (no progress).
+        cmax : float
+            Stop if |C| <= cmax. The default is zero (no noise). Note that even in 
+            simulated reconstructions without measurement noise, noise can be introduced
+            by the particle binning process.
+        penalty_parameter_scale : float
+            Scales the penalty parameter.
+        penalty_parameter_step: float
+            Steps the penalty parameter.
+        penalty_parameter_max : float
+            Maximum penalty parameter value.
+        save : bool
+            Whether to save plots and checkpoints.
+        vis_freq : int
+            Visualization frequency.  Defaults to `iterations` (saves after each epoch).
+        checkpoint_freq : int
+            Checkpoint save frequency. Defaults to `iterations` (saves after each epoch).
+        savefig_kws : dict
+            Key word arguments for matplotlib.savefig. 
+        """
         if savefig_kws is None:
             savefig_kws = dict()
         savefig_kws.setdefault("dpi", 300)
 
-        if penalty_parameter_max is None:
+        if not penalty_parameter_max:
             penalty_parameter_max = float("inf")
             
+        if not vis_freq:
+            vis_freq = iterations
+            
+        if not checkpoint_freq:
+            checkpoint_freq = iterations
 
-        def train_step(step):
-            print("step={}".format(step))
-            print("mu={}".format(self.model.penalty_parameter))
-            print("lambd={}".format(self.model.lagrange_multipliers))
+        
+        def train_epoch(epoch):
+            """Train one epoch (inner loop)."""
             self.monitor.reset()
 
             for iteration in range(iterations):                
                 self.optimizer.zero_grad()
+                
                 loss, H, C = self.model.loss(batch_size)
     
                 self.monitor.action(
-                    step=step,
+                    epoch=epoch,
                     iteration=iteration,
                     L=loss,
                     H=H,
                     C=C,
                     batch_size=batch_size,
                 )
-    
+                
                 if not (torch.isinf(loss) or torch.isnan(loss)):
                     loss.backward()
                     self.optimizer.step()
-    
+
                 if ((iteration + 1) % vis_freq == 0) or ((iteration + 1) == iterations):
                     self.model.eval()
                     with torch.no_grad():
                         curr_state_dict = self.model.state_dict()
                         self.model.load_state_dict(self.monitor.best_state_dict)
                         self.make_and_save_plots(
-                            step=step,
+                            epoch=epoch,
                             iteration=iteration,
                             save=save,
                             **savefig_kws,
@@ -307,44 +346,52 @@ class Trainer:
                         self.model.load_state_dict(curr_state_dict)
                     self.model.train()
     
-                if ((iteration + 1) % checkpoint_freq == 0) or ((checkpoint_freq + 1) == iterations):
-                    filename = f"model_{self.get_prefix(step=step, iteration=iteration)}.pt"
-                    self.model.save(os.path.join(self.checkpoint_dir, filename))
-    
-                self.lr_scheduler.step(float(loss))
-        
+                if ((iteration + 1) % checkpoint_freq == 0) or ((iteration + 1) == iterations):
+                    if save:
+                        curr_state_dict = self.model.state_dict()
+                        self.model.load_state_dict(self.monitor.best_state_dict)
+                        filename = f"model_{self.get_prefix(epoch=epoch, iteration=iteration)}.pt"
+                        self.model.save(os.path.join(self.checkpoint_dir, filename))
+                        self.model.load_state_dict(curr_state_dict)
 
+                ## To do: compute T = 0.5 * | grad(C) / |grad(C)| - grad(H) / |grad(H)| |^2 = 0.
+                ## T = 0 when entropy is maximized.
+                # ...
+        
+                self.lr_scheduler.step(loss.item())
+
+
+        ## Outer loop: Penalty Method (PM).
+        
         C_norm_old = float("inf")
-        n_steps_improved = 0
-    
-        for step in range(steps):
-            train_step(step)
+        
+        for epoch in range(epochs):
+            print("epoch={}".format(epoch))
+            print("mu={}".format(self.model.penalty_parameter))
+
+            train_epoch(epoch)
             
             C_norm = self.monitor.meters["C_norm"].avg  
-            improved = C_norm < rtol * C_norm_old
             
-            if improved:
-                # Update the lagrange multipliers.
-                C = [meter.avg for meter in self.monitor.meters["C"]]
-                for i in range(len(self.model.lagrange_multipliers)):
-                    self.model.lagrange_multipliers[i] += self.model.penalty_parameter * C[i]
-                n_steps_improved += 1
-            else:
-                # Stop if increasing the penalty parameter didn't help. This should
-                # let us avoid tuning the maximum penalty parameter. It seems to be
-                # working, but need to think if there is a better way.
-                if step > 0 and n_steps_improved == 0:
-                    penalty_parameter_max = self.model.penalty_parameter
-                    print("Increasing penalty parameter did not help.")
-                    print("Setting penalty_parameter_max = {}".format(penalty_parameter_max))
-                    print("You can probably stop training now.")
+            print("C_norm={}".format(C_norm))
+            print("C_norm_old={}".format(C_norm_old))
+            print("frac={}".format(C_norm / C_norm_old))
+            print("diff={}".format(C_norm - C_norm_old))
 
-                # Update the penalty parameter.
-                self.model.penalty_parameter = min(
-                    penalty_parameter_max,
-                    penalty_parameter_scale * self.model.penalty_parameter,
-                )
-                n_steps_improved = 0
-                
+            converged = False
+            if C_norm > (1.0 - rtol) * C_norm_old:
+                print("CONVERGED (rtol)")
+                return
+            if C_norm_old - C_norm < atol:
+                print("CONVERGED (atol)")
+                return
+            if C_norm <= cmax:
+                print("CONVERGED (cmax)")
+                return 
+            
+            self.model.penalty_parameter += penalty_parameter_step
+            if self.model.penalty_parameter >= penalty_parameter_max:
+                print("Max penalty parameter reached.")
+                return
+            
             C_norm_old = C_norm
-

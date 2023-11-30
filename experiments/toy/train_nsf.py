@@ -1,4 +1,22 @@
-"""Train 2D MENT-Flow model."""
+"""Train 2D MENT-Flow model using the Penalty Method (PM).
+
+For a given lattice, initial distribution, measurement type, and discrepancy function 
+(mean absolute value, KL divergence, etc.), a couple setup runs are usually required 
+to tune the following parameters (in addition to the flow and optimizer parameters).
+
+The `mu_step` and `mu_scale` parameters determine the penalty parameter step size 
+and scaling factor after each epoch. These numbers should be as small as possible to
+avoid ill-conditioning. A reasonable choice is to converge in ~10-20 epochs.
+
+The `cmax` parameter defines the convergence condition --- the maximum allowed L1 norm
+of the discrepancy vector C, divided by the length of C. Training will cease as soon 
+as |C| <= cmax * len(C). The ideal stopping point is usually clear from a plot of |C| 
+vs. iteration number. Eventually, large increases in H will be required for very 
+small decreases in |C|; we want to stop before this occurs.
+
+Eventually, an automated stopping condition based on the change in C and H may be
+implemented.
+"""
 import argparse
 import copy
 import functools
@@ -73,16 +91,18 @@ parser.add_argument("--targ-scale", type=float, default=1.0)
 
 # Optimization
 parser.add_argument("--disc", type=str, default="kld", choices=["kld", "mae", "mse"])
-parser.add_argument("--lambd", type=float, default=0.0)
-parser.add_argument("--mu", type=float, default=100.0)
-parser.add_argument("--mu-scale", type=float, default=2.0)
-parser.add_argument("--mu-max", type=float, default=None)  # auto
-parser.add_argument("--rtol", type=float, default=0.80)
+parser.add_argument("--mu", type=float, default=5.0)
+parser.add_argument("--mu-step", type=float, default=10.0)
+parser.add_argument("--mu-scale", type=float, default=1.0)
+parser.add_argument("--mu-max", type=float, default=None)
+parser.add_argument("--rtol", type=float, default=0.0)
+parser.add_argument("--atol", type=float, default=0.0)
+parser.add_argument("--cmax", type=float, default=0.0)
 parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
 
-parser.add_argument("--steps", type=int, default=20)
-parser.add_argument("--iters", type=int, default=750)
-parser.add_argument("--batch-size", type=int, default=30000)
+parser.add_argument("--epochs", type=int, default=20)
+parser.add_argument("--iters", type=int, default=1000)
+parser.add_argument("--batch-size", type=int, default=40000)
 
 # Optimizer
 parser.add_argument("--lr", type=float, default=0.001)
@@ -92,9 +112,9 @@ parser.add_argument("--lr-patience", type=int, default=250)
 parser.add_argument("--weight-decay", type=float, default=0.0)
 
 # Diagnostics
-parser.add_argument("--check-freq", type=int, default=250)
-parser.add_argument("--vis-freq", type=int, default=250)
-parser.add_argument("--vis-size", type=int, default=int(1.00e+05))
+parser.add_argument("--check-freq", type=int, default=None)
+parser.add_argument("--vis-freq", type=int, default=None)
+parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
 parser.add_argument("--vis-bins", type=int, default=125)
 parser.add_argument("--vis-res", type=int, default=250)
 parser.add_argument("--fig-ext", type=str, default="png")
@@ -220,7 +240,6 @@ model = mf.MENTFlow(
     lattices=lattices,
     diagnostic=diagnostic,
     measurements=measurements,
-    lagrange_multipliers=args.lambd,
     penalty_parameter=args.mu,
     discrepancy_function=args.disc,
 )
@@ -348,7 +367,7 @@ lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 
 monitor = mf.train.Monitor(
     model=model, 
-    momentum=0.99, 
+    momentum=0.98, 
     freq=1,
     path=man.get_filename("history.pkl")
 )
@@ -365,15 +384,19 @@ trainer = mf.train.Trainer(
 )
 
 trainer.train(
-    steps=args.steps,
+    epochs=args.epochs,
     iterations=args.iters,
     batch_size=args.batch_size,
     rtol=args.rtol,
-    checkpoint_freq=args.check_freq,
-    vis_freq=args.vis_freq,
+    atol=args.atol,
+    cmax=args.cmax,
+    penalty_parameter_step=args.mu_step,
     penalty_parameter_scale=args.mu_scale,
     penalty_parameter_max=args.mu_max,
+    save=True,
+    vis_freq=args.vis_freq,
+    checkpoint_freq=args.check_freq,
     savefig_kws=dict(ext=args.fig_ext, dpi=args.fig_dpi),
 )
 
-
+print(man.timestamp)

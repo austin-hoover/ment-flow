@@ -11,7 +11,6 @@ import torch.nn as nn
 import zuko
 
 import mentflow.losses as losses
-from mentflow.models import NNTransformer
 
 
 class MENTModel(nn.Module):
@@ -24,9 +23,8 @@ class MENTModel(nn.Module):
         lattices: List[Type[nn.Module]],
         diagnostic: Type[nn.Module],
         measurements: List[torch.Tensor],
-        lagrange_multipliers: float = 1.0,
-        penalty_parameter: float = 10.0,
         discrepancy_function: str = "kld",
+        penalty_parameter: float = 10.0,
     ) -> None:
         """Constructor.
 
@@ -48,10 +46,6 @@ class MENTModel(nn.Module):
             lattice. Currently, only one diagnostic can be added.
         measurements : list[tensor], shape (n_meas,)
             The measurement data/profiles.
-        lagrange_multipliers : float
-            Lagrange multiplier (lambda) associated with each measurement. This value will
-            be broadcast to a list of length n_meas. Currently, we do not assign a multiplier
-            to each pixel in the measurement grid (like in MENT).
         penalty_parameter : float
             Penalty parameter (mu) for loss function.
         discrepancy_function : {"kld", "mae", "mse"}
@@ -68,7 +62,6 @@ class MENTModel(nn.Module):
         self.diagnostic = diagnostic
         self.set_measurements(measurements)
         self.penalty_parameter = penalty_parameter
-        self.lagrange_multipliers = self.n_meas * [lagrange_multipliers]
         self.discrepancy_function = {
             "mae": losses.mae,
             "mse": losses.mse,
@@ -112,19 +105,20 @@ class MENTModel(nn.Module):
 
         Returns
         -------
-        C : tensor, shape (n_meas,)
+        C : list, shape (n_meas,)
             The discrepancy vector.
         """
         predictions = self.simulate(x)
-        C = torch.zeros(self.n_meas)
+        C = self.n_meas * [0.0]
         for i in range(self.n_meas):
             C[i] = self.discrepancy_function(predictions[i], self.measurements[i])
         return C
 
     def loss(self, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
-        """Compute the loss using a new batch.
+        """Compute the Penalty Method (PM) loss using a new batch.
         
-        We use the Augmented Lagrangian loss function: L = mu * C^2 + lambda * C
+        L = H + mu * |C| / n_meas, where H is the entropy, C is the discrepancy vector, 
+        and |.| is the l1 norm.
 
         Parameters
         ----------
@@ -141,10 +135,9 @@ class MENTModel(nn.Module):
         C : tensor, shape (n_meas,)
             The discrepancy vector.
         """
-
         x, H = self.sample_and_entropy(batch_size)
         C = self.discrepancy(x)
-        L = losses.augmented_lagrangian(H, C, self.lagrange_multipliers, self.penalty_parameter)
+        L = H + self.penalty_parameter * (sum(C) / self.n_meas)
         return (L, H, C)
 
     def parameters(self) -> Iterator[nn.Parameter]:
@@ -228,6 +221,7 @@ class MENTFlow(MENTModel):
 
 
 class MENTNN(MENTModel):
+    """MENT model using non-invertible neural network generator."""
     def __init__(
         self,
         flow: Type[nn.Module],

@@ -39,7 +39,7 @@ parser.add_argument("--seed", type=int, default=None)
 parser.add_argument(
     "--data", 
     type=str, 
-    default="circles", 
+    default="swissroll", 
     choices=[
         "circles",
         "gaussians",
@@ -62,7 +62,7 @@ parser.add_argument("--meas-bins", type=int, default=75)
 parser.add_argument("--meas-noise", type=float, default=None)
 parser.add_argument("--xmax", type=float, default=3.0)
 
-# Normalizing flow parameters
+# Neural network generator parameters
 parser.add_argument("--hidden-units", type=int, default=128)
 parser.add_argument("--hidden-layers", type=int, default=5)
 parser.add_argument("--activation", type=str, default="tanh")
@@ -72,29 +72,31 @@ parser.add_argument("--targ-scale", type=float, default=1.0)
 parser.add_argument("--entest", type=str, default="cov")
 
 # Optimization
-parser.add_argument("--disc", type=str, default="mae", choices=["kld", "mae", "mse"])
-parser.add_argument("--lambd", type=float, default=0.0)
-parser.add_argument("--mu", type=float, default=100.0)
-parser.add_argument("--mu-scale", type=float, default=1.5)
-parser.add_argument("--mu-max", type=float, default=None)  # auto
-parser.add_argument("--rtol", type=float, default=0.90)
-parser.add_argument("--absent", type=int, default=0)
+parser.add_argument("--disc", type=str, default="kld", choices=["kld", "mae", "mse"])
+parser.add_argument("--mu", type=float, default=5.0)
+parser.add_argument("--mu-step", type=float, default=10.0)
+parser.add_argument("--mu-scale", type=float, default=1.0)
+parser.add_argument("--mu-max", type=float, default=None)
+parser.add_argument("--rtol", type=float, default=0.0)
+parser.add_argument("--atol", type=float, default=0.0)
+parser.add_argument("--cmax", type=float, default=0.0)
+parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
 
-parser.add_argument("--steps", type=int, default=20)
-parser.add_argument("--iters", type=int, default=2000)
-parser.add_argument("--batch-size", type=int, default=30000)
+parser.add_argument("--epochs", type=int, default=20)
+parser.add_argument("--iters", type=int, default=500)
+parser.add_argument("--batch-size", type=int, default=40000)
 
 # Optimizer
 parser.add_argument("--lr", type=float, default=0.001)
 parser.add_argument("--lr-min", type=float, default=0.0005)
 parser.add_argument("--lr-drop", type=float, default=0.5)
-parser.add_argument("--lr-patience", type=int, default=250)
+parser.add_argument("--lr-patience", type=int, default=500)
 parser.add_argument("--weight-decay", type=float, default=0.0)
 
 # Diagnostics
-parser.add_argument("--check-freq", type=int, default=250)
-parser.add_argument("--vis-freq", type=int, default=250)
-parser.add_argument("--vis-size", type=int, default=int(1.00e+05))
+parser.add_argument("--check-freq", type=int, default=None)
+parser.add_argument("--vis-freq", type=int, default=None)
+parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
 parser.add_argument("--vis-bins", type=int, default=125)
 parser.add_argument("--vis-res", type=int, default=250)
 parser.add_argument("--fig-ext", type=str, default="png")
@@ -196,8 +198,9 @@ measurements_np = [grab(measurement) for measurement in measurements]
 # Model
 # --------------------------------------------------------------------------------------
 
-flow = mf.models.NNTransformer(
-    features=d,
+flow = mf.models.NNGenerator(
+    input_features=d,
+    output_features=d,
     hidden_layers=args.hidden_layers,
     hidden_units=args.hidden_units,
     dropout=args.dropout,
@@ -235,15 +238,15 @@ model = mf.MENTNN(
     lattices=lattices,
     diagnostic=diagnostic,
     measurements=measurements,
-    lagrange_multipliers=args.lambd,
     penalty_parameter=args.mu,
     discrepancy_function=args.disc,
 )
-
+    
 # Save config for evaluation.
 cfg = {
     "flow": {
-        "d": d,
+        "input_features": d,
+        "output_features": d,
         "hidden_units": args.hidden_units,
         "hidden_layers": args.hidden_layers,
         "dropout": args.dropout,
@@ -267,25 +270,22 @@ with open(man.get_filename("config.pkl"), "wb") as file:
 # Diagnostics
 # --------------------------------------------------------------------------------------
 
-monitor = mf.train.Monitor(
-    model=model, 
-    freq=1, 
-    momentum=0.99, 
-    path=man.get_filename("history.pkl")
-)
-
 
 def make_plots(x, predictions):
     figs = []
 
-    # Plot the ground-truth samples, model samples, and model density.
-    fig, axs = plotting.plot_dist(
-        grab(x0[:args.vis_size]), 
-        x,
-        coords=([np.linspace(-xmax, xmax, s) for s in prob.shape]), 
-        n_bins=args.vis_bins, 
-        limits=(2 * [(-xmax, xmax)]), 
+    # Plot the ground-truth samples, model samples.
+    fig, axs = pplt.subplots(
+        ncols=2, 
+        space=0.0,
+        xspineloc="neither",
+        yspineloc="neither",
+        share=False
     )
+    limits = 2 * [(-xmax, xmax)]
+    n_bins = args.vis_bins
+    axs[0].hist2d(grab(x0[:args.vis_size])[:, 0], grab(x0[:args.vis_size])[:, 1], bins=n_bins)
+    axs[1].hist2d(x[:, 0], x[:, 1], bins=n_bins)
     figs.append(fig)
 
     # Plot overlayed simulated/measured projections.
@@ -353,6 +353,13 @@ lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     factor=args.lr_drop,
 )
 
+monitor = mf.train.Monitor(
+    model=model, 
+    momentum=0.98, 
+    freq=1,
+    path=man.get_filename("history.pkl")
+)
+
 trainer = mf.train.Trainer(
     model=model,
     optimizer=optimizer,
@@ -365,14 +372,19 @@ trainer = mf.train.Trainer(
 )
 
 trainer.train(
-    steps=args.steps,
+    epochs=args.epochs,
     iterations=args.iters,
     batch_size=args.batch_size,
     rtol=args.rtol,
-    checkpoint_freq=args.check_freq,
-    vis_freq=args.vis_freq,
+    atol=args.atol,
+    cmax=args.cmax,
+    penalty_parameter_step=args.mu_step,
     penalty_parameter_scale=args.mu_scale,
     penalty_parameter_max=args.mu_max,
+    save=True,
+    vis_freq=args.vis_freq,
+    checkpoint_freq=args.check_freq,
     savefig_kws=dict(ext=args.fig_ext, dpi=args.fig_dpi),
 )
 
+print(man.timestamp)
