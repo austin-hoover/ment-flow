@@ -7,7 +7,7 @@ import mentflow as mf
 
 
 def reconstruct_tomo(measurements, angles, method="sart", iterations=10):
-    """Reconstruct image using traditional tomography methods.
+    """Reconstruct image from linear projections using standard tomography algorithms.
 
     Parameters
     ----------
@@ -19,6 +19,11 @@ def reconstruct_tomo(measurements, angles, method="sart", iterations=10):
         Tomography method. Options: {"fbp", "sart"}.
     iterations : int
         Number of iterations if method is iterative.
+
+    Returns
+    -------
+    image : ndarray, shape (m, m)
+        The reconstructed distribution.
     """
     radon_image = np.vstack(measurements).T
     angles = np.degrees(angles)
