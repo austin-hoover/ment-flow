@@ -21,5 +21,5 @@ pip install -e .
 ## Experiments
 
 ```
-python experiments/toy/train_nsf.py --data=spirals
+python experiments/2d_from_1d/train.py --device=mps
 ```
