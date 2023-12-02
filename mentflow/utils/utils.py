@@ -1,3 +1,6 @@
+import math
+import pickle
+
 import numpy as np
 import torch
 
@@ -44,3 +47,13 @@ def rotation_matrix(angle):
 
 def centers_from_edges(edges):
     return 0.5 * (edges[:-1] + edges[1:])
+
+
+def load_pickle(path):
+    with open(path, "rb") as file:
+        return pickle.load(file)
+
+
+def save_pickle(object, path):
+    with open(path, "wb") as file:
+        return pickle.dump(object, file)

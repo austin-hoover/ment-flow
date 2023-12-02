@@ -268,5 +268,5 @@ class MENTNN(GenMENT):
 
     def sample_and_entropy(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         x = self.sample(n)
-        H = self.entropy_estimator(x, target=self.target)
+        H = self.entropy_estimator(x)
         return (x, H)

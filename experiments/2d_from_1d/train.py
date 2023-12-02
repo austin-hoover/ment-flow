@@ -1,4 +1,4 @@
-"""Train 2D neural network model with emittance entropy estimator."""
+"""Train 2D MENT-Flow model using the Penalty Method (PM)."""
 import argparse
 import copy
 import functools
@@ -18,8 +18,10 @@ import proplot as pplt
 import zuko
 
 import mentflow as mf
-from experiments.toy import plotting
-from experiments.toy import utils
+
+# Local
+import plotting
+import utils
 
 
 pplt.rc["cmap.discrete"] = False
@@ -46,15 +48,14 @@ parser.add_argument(
         "hollow",
         "kv",
         "pinwheel",
-        "rings",
         "spirals",
         "swissroll",
         "waterbag",
     ]
 )
-parser.add_argument("--data-size", type=int, default=int(1.00e+06))
-parser.add_argument("--data-noise", type=float, default=None)
 parser.add_argument("--data-decorr", type=int, default=0)
+parser.add_argument("--data-noise", type=float, default=None)
+parser.add_argument("--data-size", type=int, default=int(1.00e+06))
 parser.add_argument("--data-warp", type=int, default=0)
 parser.add_argument("--meas", type=int, default=6)
 parser.add_argument("--meas-angle", type=int, default=180.0)
@@ -62,45 +63,45 @@ parser.add_argument("--meas-bins", type=int, default=75)
 parser.add_argument("--meas-noise", type=float, default=None)
 parser.add_argument("--xmax", type=float, default=3.0)
 
-# Neural network generator parameters
-parser.add_argument("--hidden-units", type=int, default=128)
-parser.add_argument("--hidden-layers", type=int, default=5)
-parser.add_argument("--activation", type=str, default="tanh")
-parser.add_argument("--dropout", type=float, default=0.0)
+# Model
+parser.add_argument("--transforms", type=int, default=3)
+parser.add_argument("--hidden-units", type=int, default=64)
+parser.add_argument("--hidden-layers", type=int, default=3)
+parser.add_argument("--spline-bins", type=int, default=20)
+parser.add_argument("--perm", type=int, default=1)
 parser.add_argument("--base-scale", type=float, default=1.0)
 parser.add_argument("--targ-scale", type=float, default=1.0)
-parser.add_argument("--entest", type=str, default="cov")
 
-# Optimization
+# Training
+parser.add_argument("--batch-size", type=int, default=40000)
+parser.add_argument("--epochs", type=int, default=20)
+parser.add_argument("--iters", type=int, default=500)
 parser.add_argument("--disc", type=str, default="kld", choices=["kld", "mae", "mse"])
-parser.add_argument("--mu", type=float, default=5.0)
-parser.add_argument("--mu-step", type=float, default=10.0)
-parser.add_argument("--mu-scale", type=float, default=1.0)
-parser.add_argument("--mu-max", type=float, default=None)
+parser.add_argument("--penalty", type=float, default=0.0)
+parser.add_argument("--penalty-step", type=float, default=5.0)
+parser.add_argument("--penalty-scale", type=float, default=1.0)
+parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
 parser.add_argument("--atol", type=float, default=0.0)
 parser.add_argument("--cmax", type=float, default=0.0)
 parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
 
-parser.add_argument("--epochs", type=int, default=20)
-parser.add_argument("--iters", type=int, default=500)
-parser.add_argument("--batch-size", type=int, default=40000)
-
-# Optimizer
+# Optimizer (ADAM)
 parser.add_argument("--lr", type=float, default=0.001)
-parser.add_argument("--lr-min", type=float, default=0.0005)
+parser.add_argument("--lr-min", type=float, default=0.001)
 parser.add_argument("--lr-drop", type=float, default=0.5)
-parser.add_argument("--lr-patience", type=int, default=500)
+parser.add_argument("--lr-patience", type=int, default=250)
 parser.add_argument("--weight-decay", type=float, default=0.0)
 
 # Diagnostics
 parser.add_argument("--check-freq", type=int, default=None)
 parser.add_argument("--vis-freq", type=int, default=None)
-parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
 parser.add_argument("--vis-bins", type=int, default=125)
+parser.add_argument("--vis-maxcols", type=int, default=7)
 parser.add_argument("--vis-res", type=int, default=250)
-parser.add_argument("--fig-ext", type=str, default="png")
+parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
 parser.add_argument("--fig-dpi", type=float, default=300)
+parser.add_argument("--fig-ext", type=str, default="png")
 
 args = parser.parse_args()
 
@@ -134,34 +135,31 @@ outdir = os.path.join(
     f"data_output/{args.data}/{path.stem}/"
 )
 man = mf.train.ScriptManager(filepath, outdir)
-man.make_folders("checkpoints", "figures")
-
-# Create logger.
-logger = man.get_logger(filename="log.txt")
-logger.info(args)
+man.make_dirs("checkpoints", "figures")
 
 # Save args.
-with open(man.get_filename("args.pkl"), "wb") as file:
-    pickle.dump(vars(args), file)
+mf.utils.save_pickle(vars(args), man.get_path("args.pkl"))
 
 # Save a copy of this script.
-shutil.copy(__file__, man.get_filename("script.py"))
+shutil.copy(__file__, man.get_path("script.py"))
 
 
 # Data
 # --------------------------------------------------------------------------------------
 
-# Generate input distribution.
+# Define the input distribution.
 d = 2
-x0 = mf.data.toy.gen_data(
-    name=args.data,
-    size=args.data_size,
-    noise=args.data_noise,
-    shuffle=True,
+dist = mf.data.toy.gen_dist(
+    args.data, 
+    noise=args.data_noise, 
+    shuffle=True, 
     decorr=args.data_decorr,
-    seed=args.seed,
-    warp=args.data_warp,
+    rng=rng,
 )
+mf.utils.save_pickle(dist, man.get_path("dist.pkl"))
+
+# Draw samples from the input distribution.
+x0 = dist.sample(args.data_size)
 x0 = cvt(torch.from_numpy(x0))
 
 # Generate lattices.
@@ -200,102 +198,72 @@ measurements_np = [grab(measurement) for measurement in measurements]
 # Model
 # --------------------------------------------------------------------------------------
 
-flow = mf.models.NNGenerator(
-    input_features=d,
-    output_features=d,
-    hidden_layers=args.hidden_layers,
-    hidden_units=args.hidden_units,
-    dropout=args.dropout,
-    activation=args.activation,
-)
-flow = flow.to(device)
-
 target = None
 if not args.absent:
-    target = torch.distributions.Normal(
-        loc=cvt(torch.zeros(d)),
-        scale=cvt(args.base_scale * torch.ones(d)),
+    target = zuko.distributions.DiagNormal(
+        cvt(torch.zeros(d)),
+        cvt(args.targ_scale * torch.ones(d)),
     )
 
-base = torch.distributions.Normal(
-    loc=cvt(torch.zeros(d)),
-    scale=cvt(args.base_scale * torch.ones(d)),
+flow = zuko.flows.NSF(
+    features=d, 
+    transforms=args.transforms, 
+    bins=args.spline_bins,
+    hidden_features=(args.hidden_layers * [args.hidden_units]),
+    randperm=args.perm,
 )
-
-if args.entest == "cov":
-    entropy_estimator = mf.entropy.CovarianceEntropyEstimator()
-elif args.entest == "knn":
-    entropy_estimator = mf.entropy.KNNEntropyEstimator(k=5)
-else:
-    entropy_estimator = mf.entropy.EmptyEntropyEstimator()
-entropy_estimator = entropy_estimator.to(device)
-
-
-model = mf.MENTNN(
+flow = zuko.flows.Flow(flow.transform.inv, flow.base)  # faster sampling
+flow = flow.to(device)
+    
+model = mf.MENTFlow(
     d=d,
     flow=flow,
-    base=base,
     target=target,
-    entropy_estimator=entropy_estimator,
     lattices=lattices,
     diagnostic=diagnostic,
     measurements=measurements,
-    penalty_parameter=args.mu,
+    penalty_parameter=args.penalty,
     discrepancy_function=args.disc,
 )
-    
+
 # Save config for evaluation.
 cfg = {
     "flow": {
-        "input_features": d,
-        "output_features": d,
+        "features": d,
+        "transforms": args.transforms,
+        "spline_bins": args.spline_bins,
         "hidden_units": args.hidden_units,
         "hidden_layers": args.hidden_layers,
-        "dropout": args.dropout,
-        "activation": args.activation,
-    },
-    "data": {
-        "name": args.data,
-        "size": args.data_size,
-        "noise": args.data_noise,
-        "shuffle": True,
-        "decorr": args.data_decorr,
-        "seed": args.seed,
-        "warp": args.data_warp,
+        "randperm": args.perm,
     },
 }
-
-with open(man.get_filename("config.pkl"), "wb") as file:
-    pickle.dump(cfg, file)
+mf.utils.save_pickle(cfg, man.get_path("cfg.pkl"))
 
 
 # Diagnostics
 # --------------------------------------------------------------------------------------
 
 
-def make_plots(x, predictions):
+def make_plots(x, prob, predictions):
     figs = []
 
-    # Plot the ground-truth samples, model samples.
-    fig, axs = pplt.subplots(
-        ncols=2, 
-        space=0.0,
-        xspineloc="neither",
-        yspineloc="neither",
-        share=False
+    # Plot the ground-truth samples, model samples, and model density.
+    fig, axs = plotting.plot_dist(
+        dist.sample(args.vis_size),
+        x,
+        prob=prob, 
+        coords=([np.linspace(-xmax, xmax, s) for s in prob.shape]), 
+        n_bins=args.vis_bins, 
+        limits=(2 * [(-xmax, xmax)]), 
     )
-    limits = 2 * [(-xmax, xmax)]
-    n_bins = args.vis_bins
-    axs[0].hist2d(grab(x0[:args.vis_size])[:, 0], grab(x0[:args.vis_size])[:, 1], bins=n_bins)
-    axs[1].hist2d(x[:, 0], x[:, 1], bins=n_bins)
     figs.append(fig)
 
     # Plot overlayed simulated/measured projections.
     fig, axs = plotting.plot_proj(
-        measurements_np, 
+        measurements_np,
         predictions, 
-        bin_edges=grab(bin_edges), 
-        maxcols=7,
+        bin_edges=grab(diagnostic.bin_edges), 
+        maxcols=args.vis_maxcols,
     )
     figs.append(fig)
 
@@ -303,10 +271,23 @@ def make_plots(x, predictions):
      
 
 def plotter(model):
+    # Evaluate the model density.
+    res = args.vis_res
+    grid_coords = [np.linspace(-xmax, xmax, res) for i in range(2)]
+    grid_points = mf.utils.get_grid_points(grid_coords)
+    grid_points = cvt(torch.from_numpy(grid_points))
+    log_prob = model.log_prob(grid_points)
+    log_prob = log_prob.reshape((res, res))
+    prob = torch.exp(log_prob)
+    
+    # Draw samples from the model.
     x = cvt(model.sample(args.vis_size))
+
+    # Simulate the measurements.
     predictions = model.simulate(x, kde=False)
     predictions = [grab(prediction) for prediction in predictions]
-    return make_plots(grab(x), predictions)
+
+    return make_plots(grab(x), grab(prob), predictions)
 
 
 # FBP/SART benchmarks
@@ -359,7 +340,7 @@ monitor = mf.train.Monitor(
     model=model, 
     momentum=0.98, 
     freq=1,
-    path=man.get_filename("history.pkl")
+    path=man.get_path("history.pkl")
 )
 
 trainer = mf.train.Trainer(
@@ -380,9 +361,9 @@ trainer.train(
     rtol=args.rtol,
     atol=args.atol,
     cmax=args.cmax,
-    penalty_parameter_step=args.penalty,
-    penalty_parameter_scale=args.penalty_scale,
-    penalty_parameter_max=args.penalty_max,
+    penalty_step=args.penalty_step,
+    penalty_scale=args.penalty_scale,
+    penalty_max=args.penalty_max,
     save=True,
     vis_freq=args.vis_freq,
     checkpoint_freq=args.check_freq,

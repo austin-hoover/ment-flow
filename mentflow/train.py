@@ -65,9 +65,9 @@ class ScriptManager:
     def get_logger(self, disp: bool = True, filename : str = "log.txt") -> logging.Logger:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
-        filename = self.get_filename(filename)
+        path = self.get_path(filename)
         
-        info_file_handler = logging.FileHandler(filename, mode="a")
+        info_file_handler = logging.FileHandler(path, mode="a")
         info_file_handler.setLevel(logging.INFO)
         logger.addHandler(info_file_handler)
         
@@ -78,10 +78,10 @@ class ScriptManager:
             
         return logger
 
-    def get_filename(self, filename : str) -> str:
+    def get_path(self, filename : str) -> str:
         return os.path.join(self.outdir, filename)
 
-    def make_folders(self, *names) -> None:
+    def make_dirs(self, *names) -> None:
         for name in names:
             path = os.path.join(self.outdir, name)
             if not os.path.exists(path):
@@ -263,6 +263,23 @@ class Trainer:
         savefig_kws: Optional[dict] = None,
     ) -> None:
         """Train using the Penalty Method (PM).
+
+        For a given lattice, initial distribution, measurement type, and discrepancy function 
+        (mean absolute value, KL divergence, etc.), a couple setup runs are usually required 
+        to tune the following parameters (in addition to the flow and optimizer parameters).
+        
+        The `penalty_step` and `penalty_scale` parameters determine the penalty parameter step 
+        size and scaling factor after each epoch. These numbers should be as small as possible 
+        to avoid ill-conditioning. A reasonable choice is to converge in 10-20 epochs.
+        
+        The `cmax` parameter defines the convergence condition --- the maximum allowed L1 norm
+        of the discrepancy vector C, divided by the length of C. Training will cease as soon 
+        as |C| <= cmax * len(C). The ideal stopping point is usually clear from a plot of |C| 
+        vs. iteration number. Eventually, large increases in H will be required for very 
+        small decreases in |C|; we want to stop before this occurs.
+        
+        Eventually, an automated stopping condition based on the change in C and H may be
+        implemented.
 
         Parameters
         ----------

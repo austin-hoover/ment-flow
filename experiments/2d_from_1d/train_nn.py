@@ -1,22 +1,4 @@
-"""Train 2D MENT-Flow model using the Penalty Method (PM).
-
-For a given lattice, initial distribution, measurement type, and discrepancy function 
-(mean absolute value, KL divergence, etc.), a couple setup runs are usually required 
-to tune the following parameters (in addition to the flow and optimizer parameters).
-
-The `mu_step` and `mu_scale` parameters determine the penalty parameter step size 
-and scaling factor after each epoch. These numbers should be as small as possible to
-avoid ill-conditioning. A reasonable choice is to converge in ~10-20 epochs.
-
-The `cmax` parameter defines the convergence condition --- the maximum allowed L1 norm
-of the discrepancy vector C, divided by the length of C. Training will cease as soon 
-as |C| <= cmax * len(C). The ideal stopping point is usually clear from a plot of |C| 
-vs. iteration number. Eventually, large increases in H will be required for very 
-small decreases in |C|; we want to stop before this occurs.
-
-Eventually, an automated stopping condition based on the change in C and H may be
-implemented.
-"""
+"""Train 2D neural network model with emittance entropy estimator."""
 import argparse
 import copy
 import functools
@@ -36,8 +18,10 @@ import proplot as pplt
 import zuko
 
 import mentflow as mf
-from experiments.toy import plotting
-from experiments.toy import utils
+
+# Local
+import plotting
+import utils
 
 
 pplt.rc["cmap.discrete"] = False
@@ -80,13 +64,13 @@ parser.add_argument("--meas-noise", type=float, default=None)
 parser.add_argument("--xmax", type=float, default=3.0)
 
 # Model
-parser.add_argument("--transforms", type=int, default=3)
-parser.add_argument("--hidden-units", type=int, default=64)
-parser.add_argument("--hidden-layers", type=int, default=3)
-parser.add_argument("--spline-bins", type=int, default=20)
-parser.add_argument("--perm", type=int, default=1)
+parser.add_argument("--hidden-units", type=int, default=128)
+parser.add_argument("--hidden-layers", type=int, default=5)
+parser.add_argument("--activation", type=str, default="tanh")
+parser.add_argument("--dropout", type=float, default=0.0)
 parser.add_argument("--base-scale", type=float, default=1.0)
 parser.add_argument("--targ-scale", type=float, default=1.0)
+parser.add_argument("--entest", type=str, default="cov")
 
 # Training
 parser.add_argument("--batch-size", type=int, default=40000)
@@ -100,7 +84,7 @@ parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
 parser.add_argument("--atol", type=float, default=0.0)
 parser.add_argument("--cmax", type=float, default=0.0)
-parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
+parser.add_argument("--absent", type=int, default=1, help="use absolute entropy")
 
 # Optimizer (ADAM)
 parser.add_argument("--lr", type=float, default=0.001)
@@ -151,18 +135,13 @@ outdir = os.path.join(
     f"data_output/{args.data}/{path.stem}/"
 )
 man = mf.train.ScriptManager(filepath, outdir)
-man.make_folders("checkpoints", "figures")
-
-# Create logger.
-logger = man.get_logger(filename="log.txt")
-logger.info(args)
+man.make_dirs("checkpoints", "figures")
 
 # Save args.
-with open(man.get_filename("args.pkl"), "wb") as file:
-    pickle.dump(vars(args), file)
+mf.utils.save_pickle(vars(args), man.get_path("args.pkl"))
 
 # Save a copy of this script.
-shutil.copy(__file__, man.get_filename("script.py"))
+shutil.copy(__file__, man.get_path("script.py"))
 
 
 # Data
@@ -177,6 +156,7 @@ dist = mf.data.toy.gen_dist(
     decorr=args.data_decorr,
     rng=rng,
 )
+mf.utils.save_pickle(dist, man.get_path("dist.pkl"))
 
 # Draw samples from the input distribution.
 x0 = dist.sample(args.data_size)
@@ -218,63 +198,77 @@ measurements_np = [grab(measurement) for measurement in measurements]
 # Model
 # --------------------------------------------------------------------------------------
 
+flow = mf.models.NNGenerator(
+    input_features=d,
+    output_features=d,
+    hidden_layers=args.hidden_layers,
+    hidden_units=args.hidden_units,
+    dropout=args.dropout,
+    activation=args.activation,
+)
+flow = flow.to(device)
+
 target = None
 if not args.absent:
-    target = zuko.distributions.DiagNormal(
-        cvt(torch.zeros(d)),
-        cvt(args.targ_scale * torch.ones(d)),
+    target = torch.distributions.Normal(
+        loc=cvt(torch.zeros(d)),
+        scale=cvt(args.base_scale * torch.ones(d)),
     )
 
-flow = zuko.flows.NSF(
-    features=d, 
-    transforms=args.transforms, 
-    bins=args.spline_bins,
-    hidden_features=(args.hidden_layers * [args.hidden_units]),
-    randperm=args.perm,
+base = torch.distributions.Normal(
+    loc=cvt(torch.zeros(d)),
+    scale=cvt(args.base_scale * torch.ones(d)),
 )
-flow = zuko.flows.Flow(flow.transform.inv, flow.base)  # faster sampling
-flow = flow.to(device)
-    
-model = mf.MENTFlow(
+
+if args.entest == "cov":
+    entropy_estimator = mf.entropy.CovarianceEntropyEstimator(prior=target)
+elif args.entest == "knn":
+    entropy_estimator = mf.entropy.KNNEntropyEstimator(k=5, prior=target)
+else:
+    entropy_estimator = mf.entropy.EmptyEntropyEstimator()
+entropy_estimator = entropy_estimator.to(device)
+
+
+model = mf.MENTNN(
     d=d,
     flow=flow,
+    base=base,
     target=target,
+    entropy_estimator=entropy_estimator,
     lattices=lattices,
     diagnostic=diagnostic,
     measurements=measurements,
     penalty_parameter=args.penalty,
     discrepancy_function=args.disc,
 )
-
+    
 # Save config for evaluation.
 cfg = {
     "flow": {
-        "d": d,
-        "transforms": args.transforms,
-        "spline_bins": args.spline_bins,
+        "input_features": d,
+        "output_features": d,
         "hidden_units": args.hidden_units,
         "hidden_layers": args.hidden_layers,
-        "randperm": args.perm,
+        "dropout": args.dropout,
+        "activation": args.activation,
     },
-    "dist": dist,
+    "base": base,
+    "entropy_estimator": entropy_estimator,
 }
-
-with open(man.get_filename("config.pkl"), "wb") as file:
-    pickle.dump(cfg, file)
+mf.utils.save_pickle(cfg, man.get_path("cfg.pkl"))
 
 
 # Diagnostics
 # --------------------------------------------------------------------------------------
 
 
-def make_plots(x, prob, predictions):
+def make_plots(x, predictions):
     figs = []
 
     # Plot the ground-truth samples, model samples, and model density.
     fig, axs = plotting.plot_dist(
-        grab(x0[:args.vis_size]), 
+        dist.sample(args.vis_size),
         x,
-        prob=prob, 
         coords=([np.linspace(-xmax, xmax, s) for s in prob.shape]), 
         n_bins=args.vis_bins, 
         limits=(2 * [(-xmax, xmax)]), 
@@ -294,23 +288,10 @@ def make_plots(x, prob, predictions):
      
 
 def plotter(model):
-    # Evaluate the model density.
-    res = args.vis_res
-    grid_coords = [np.linspace(-xmax, xmax, res) for i in range(2)]
-    grid_points = mf.utils.get_grid_points(grid_coords)
-    grid_points = cvt(torch.from_numpy(grid_points))
-    log_prob = model.log_prob(grid_points)
-    log_prob = log_prob.reshape((res, res))
-    prob = torch.exp(log_prob)
-    
-    # Draw samples from the model.
     x = cvt(model.sample(args.vis_size))
-
-    # Simulate the measurements.
     predictions = model.simulate(x, kde=False)
     predictions = [grab(prediction) for prediction in predictions]
-
-    return make_plots(grab(x), grab(prob), predictions)
+    return make_plots(grab(x), predictions)
 
 
 # FBP/SART benchmarks
@@ -331,7 +312,7 @@ for method in ["sart", "fbp"]:
     predictions = [grab(prediction) for prediction in predictions]
 
     # Make plots.
-    figs = make_plots(grab(x), prob, predictions)
+    figs = make_plots(grab(x), predictions)
     
     filename = f"fig__test_{method}_00.{args.fig_ext}"
     filename = os.path.join(man.outdir, f"figures/{filename}")
@@ -363,7 +344,7 @@ monitor = mf.train.Monitor(
     model=model, 
     momentum=0.98, 
     freq=1,
-    path=man.get_filename("history.pkl")
+    path=man.get_path("history.pkl")
 )
 
 trainer = mf.train.Trainer(
