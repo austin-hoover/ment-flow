@@ -13,12 +13,12 @@ import zuko
 import mentflow.losses as losses
 
 
-class MENTModel(nn.Module):
-    """Flow-based MENT solver."""
+class GenMENT(nn.Module):
+    """Generative maximum-entropy tomography (MENT) solver."""
     def __init__(
         self,
         d : int,
-        flow: Any,
+        flow: Type[nn.Module],
         target: Type[torch.distributions.Distribution],
         lattices: List[Type[nn.Module]],
         diagnostic: Type[nn.Module],
@@ -31,28 +31,28 @@ class MENTModel(nn.Module):
         Parameters
         ----------
         d : int
-            The 
-        flow : any
-            A flow model used to generate samples and evaluate the probability density.
-            Each subclass may use a different flow. The flow does not have to be
-            invertible; it can be any generative network.
+            Dimensionality of the space.
+        flow : torch.nn.Module subclass
+            A differentiable model that generates samples and (possibly) evalutes the 
+            probability density.
         target : Distribution
             A prior distribution for relative entropy calculations. It must implement
-            `log_prob(x)`.
+            `log_prob(x)`. If None, the absolute entropy is used.
         lattices : list[Lattice], shape (n_meas,)
-            A list of accelerator lattices; one for each measurement.
+            A list of lattices representing the transformation before each measurement.
         diagnostic : torch.nn.Module
-            The diagnostic used to measure the distribution after passage through the 
+            The diagnostic used to measure the distribution after passing through the 
             lattice. Currently, only one diagnostic can be added.
         measurements : list[tensor], shape (n_meas,)
-            The measurement data/profiles.
+            The measurement data.
         penalty_parameter : float
-            Penalty parameter (mu) for loss function.
+            Penalty parameter for the loss function (loss = entropy + penalty_parameter * discrepancy).
         discrepancy_function : {"kld", "mae", "mse"}
             Function used to estimate discrepancy between simulated and measured projections.
-            - "kld": pointwise KL divergence
+            - "kld": KL divergence
             - "mae": mean absolute error
             - "mse": mean squared error
+            - "wasserstein": Wasserstein distance
         """
         super().__init__()
         self.d = d
@@ -80,7 +80,7 @@ class MENTModel(nn.Module):
         Parameters
         ----------
         x : tensor, shape (n, d)
-            Phase space coordinate array.
+            Particle coordinates.
         **kws
             Key word arguments for `self.diagnostic.forward` method.
 
@@ -101,7 +101,7 @@ class MENTModel(nn.Module):
         Parameters
         ----------
         x : tensor, shape (n, d)
-            Phase space coordinate array.
+            Particle coordinates.
 
         Returns
         -------
@@ -141,7 +141,7 @@ class MENTModel(nn.Module):
         return (L, H, C)
 
     def parameters(self) -> Iterator[nn.Parameter]:
-        """Return trainable flow parameters."""
+        """Return trainable parameters."""
         return self.flow.parameters()
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
@@ -195,10 +195,21 @@ class MENTModel(nn.Module):
         if self.flow is not None:
             self.flow = self.flow.to(device)
         return self
-        
 
-class MENTFlow(MENTModel):
+
+class MENTFlow(GenMENT):
+    """GenMENT model using normalizing flow (invertible neural network)."""
     def __init__(self, flow: zuko.flows.Flow, **kws) -> None:
+        """Constructor.
+
+        Parameters
+        ----------
+        flow : zuko.flows.Flow
+            A normalizing flow model. We use the `zuko` package (https://github.com/probabilists/zuko).
+            The base distribution is defined within the flow object.
+        **kws
+            Key word arguments passed `GenMENT`.
+        """
         super().__init__(flow=flow, **kws)
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
@@ -220,15 +231,29 @@ class MENTFlow(MENTModel):
         return (x, H)
 
 
-class MENTNN(MENTModel):
-    """MENT model using non-invertible neural network generator."""
+class MENTNN(GenMENT):
+    """GenMENT model using non-invertible neural network."""
     def __init__(
         self,
         flow: Type[nn.Module],
-        entropy_estimator: Type[nn.Module],
-        base: Optional[Type[torch.distributions.Distribution]],
+        base: Optional[Type[torch.distributions.Distribution]] = None,
+        entropy_estimator: Optional[Type[nn.Module]] = None,
         **kws
     ) -> None:
+        """Constructor.
+
+        Parameters
+        ----------
+        flow : torch.nn.Module
+            A feedforward neural network. The network transforms a d'-dimensional base 
+            distribution to a d-dimensional data distribution.
+        base : torch.distributions.Distribution
+            The base distribution. Defaults to d-dimensional Gaussian distribution.
+        entropy_estimator : torch.nn.Module
+            Estimates the (relative) entropy from samples.
+        **kws
+            Key word arguments passed `GenMENT`.
+        """
         super().__init__(flow=flow, **kws)
         self.entropy_estimator = entropy_estimator
         self.base = base
@@ -243,5 +268,5 @@ class MENTNN(MENTModel):
 
     def sample_and_entropy(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         x = self.sample(n)
-        H = self.entropy_estimator(x)
+        H = self.entropy_estimator(x, target=self.target)
         return (x, H)

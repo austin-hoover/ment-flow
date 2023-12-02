@@ -40,3 +40,7 @@ def rotation_matrix(angle):
     _cos = np.cos(angle)
     _sin = np.sin(angle)
     return np.array([[_cos, _sin], [-_sin, _cos]])
+
+
+def centers_from_edges(edges):
+    return 0.5 * (edges[:-1] + edges[1:])

@@ -3,30 +3,39 @@ import scipy.interpolate
 import skimage.transform
 import torch
 
-from mentflow.utils import get_grid_points
+import mentflow as mf
 
 
-def reconstruct_sart(radon_image, angles, iterations=10):
+def reconstruct_tomo(measurements, angles, method="sart", iterations=10):
+    """Reconstruct image using traditional tomography methods.
+
+    Parameters
+    ----------
+    measurements : ndarray, shape (k, m)
+        List of k projections, each with m bins.
+    angles : ndarray, shape (k,)
+        List of projection angles.
+    method : str
+        Tomography method. Options: {"fbp", "sart"}.
+    iterations : int
+        Number of iterations if method is iterative.
+    """
+    radon_image = np.vstack(measurements).T
+    angles = np.degrees(angles)
+    
     image = None
-    for _ in range(iterations):
-        image = skimage.transform.iradon_sart(
-            radon_image, theta=np.degrees(angles), image=image, clip=(0.0, None)
-        )
-    return image.T
-
-
-def reconstruct_fbp(radon_image, angles):
-    image = skimage.transform.iradon(radon_image, theta=np.degrees(angles))
-    image = np.clip(image, 0.0, None)
-    return image.T
-
-
-def reconstruct(measurements, angles, method="sart", iterations=10):
-    radon_image = torch.vstack(measurements).T
-    radon_image = radon_image.detach().cpu().numpy()
-    if method == "sart":
-        return reconstruct_sart(radon_image, angles, iterations=iterations)
-    elif method == "fbp":
-        return reconstruct_fbp(radon_image, angles)
+    if method == "fbp":
+        image = skimage.transform.iradon(radon_image, theta=angles)
+    elif method == "sart":
+        for _ in range(iterations):
+            image = skimage.transform.iradon_sart(
+                radon_image, theta=angles, image=image, clip=(0.0, None)
+            )
     else:
-        raise ValueError()
+        raise ValueError("Invalid method name.")
+        
+    image = np.clip(image, 0.0, None)
+    image = image.T
+    return image
+
+    

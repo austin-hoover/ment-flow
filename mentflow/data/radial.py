@@ -1,71 +1,86 @@
+"""Radial (spherically symmetric) distributions."""
 import numpy as np
 
-from mentflow.data.utils import decorrelate
-from mentflow.data.utils import process
+from mentflow.data.distribution import Distribution
+from mentflow.data.distribution import decorrelate
 
 
-def normalize(x):
-    return np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, x)
+def normalize(X):
+    return np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, X)
 
 
-def gen_kv(n, d, rng=None):
-    return normalize(rng.normal(size=(n, d)))
+class Gaussian(Distribution):
+    def __init__(self, **kws):
+        super().__init__(**kws)
 
-
-def gen_waterbag(n, d, rng=None):
-    x = gen_kv(n, d, rng=rng)
-    r = rng.uniform(0.0, 1.0, size=n) ** (1.0 / d)
-    r = r[:, None]
-    return x * r
-
-
-def gen_hollow(n, d, rng=None, exp=0.25):
-    x = gen_kv(n, d, rng=rng)
-    r = rng.uniform(0.0, 1.0, size=x.shape[0]) ** exp
-    return x * r[:, None]
-
-
-def gen_rings(n, d, rng=None, n_rings=2):
-    n_outer = n // n_rings
-    sizes = [n - (n_rings - 1) * n_outer] + (n_rings - 1) * [n_outer]
-    radii = np.linspace(0.0, 1.0, n_rings + 1)[1:]
-    data = []
-    for size, radius in zip(sizes, radii):
-        x = radius * gen_kv(size, d, rng=rng)
-        data.append(x)
-    x = np.vstack(data)
-    return x
-
-
-def gen_data(name="waterbag", size=1000, d=2, seed=None, normalize=True, shuffle=True, noise=None, decorr=False, **kws):
-    options = {
-        "kv": {
-            "func": gen_kv,
-            "noise": 0.05,
-            "kws": {},
-        },
-        "waterbag": {
-            "func": gen_waterbag,
-            "noise": 0.05,
-            "kws": {},
-        },
-        "hollow": {
-            "func": gen_hollow,
-            "noise": 0.05,
-            "kws": {},
-        },
-        "rings": {
-            "func": gen_rings,
-            "noise": 0.15,
-            "kws": {"n_rings": 4},
-        },
-    }
-    rng = np.random.default_rng(seed)
-    func = options[name]["func"]
-    if noise is None:
-        noise = options[name]["noise"]
+    def _sample(self, n):
+        return self.rng.normal(size=(n, self.d))
         
-    x = func(size, d, rng=rng, **kws)
-    x = process(x, normalize=normalize, shuffle=shuffle, noise=noise, decorr=decorr, rng=rng)
-    return x
 
+class KV(Distribution):
+    def __init__(self, **kws):
+        super().__init__(**kws)
+        if self.noise is None:
+            self.noise = 0.05
+
+    def _sample(self, n):
+        X = self.rng.normal(size=(n, self.d))
+        return np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, X)
+        
+
+class WaterBag(Distribution):
+    def __init__(self, **kws):
+        super().__init__(**kws)
+        if self.noise is None:
+            self.noise = 0.05
+
+    def _sample(self, n):
+        X = KV(d=self.d, rng=self.rng).sample(n)
+        r = self.rng.uniform(0.0, 1.0, size=n) ** (1.0 / self.d)
+        r = r[:, None]
+        return X * r
+
+
+class Hollow(Distribution):
+    def __init__(self, exp=0.25, **kws):
+        super().__init__(**kws)
+        self.exp = exp
+        if self.noise is None:
+            self.noise = 0.05
+
+    def _sample(self, n):
+        X = KV(d=self.d, rng=self.rng).sample(n)
+        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** self.exp
+        return X * r[:, None]
+
+
+class Spheres(Distribution):
+    def __init__(self, n_rings=2, **kws):
+        super().__init__(**kws)
+        self.n_rings = n_rings
+        if self.noise is None:
+            self.noise = 0.15
+
+    def _sample(self, n):
+        n_outer = n // self.n_rings
+        sizes = [n - (self.n_rings - 1) * n_outer] + (self.n_rings - 1) * [n_outer]
+        radii = np.linspace(0.0, 1.0, self.n_rings + 1)[1:]
+        X = []
+        dist = KV(d=self.d, rng=self.rng)
+        for size, radius in zip(sizes, radii):
+            X.append(radius * dist.sample(size))
+        X = np.vstack(X)
+        return X
+
+
+DISTRIBUTIONS = {
+    "gaussian": Gaussian,
+    "kv": KV,
+    "hollow": Hollow,
+    "spheres": Spheres,
+    "waterbag": WaterBag,
+}
+
+
+def gen_dist(name, **kws):
+    return DISTRIBUTIONS[name](**kws)

@@ -64,15 +64,14 @@ parser.add_argument(
         "hollow",
         "kv",
         "pinwheel",
-        "rings",
         "spirals",
         "swissroll",
         "waterbag",
     ]
 )
-parser.add_argument("--data-size", type=int, default=int(1.00e+06))
-parser.add_argument("--data-noise", type=float, default=None)
 parser.add_argument("--data-decorr", type=int, default=0)
+parser.add_argument("--data-noise", type=float, default=None)
+parser.add_argument("--data-size", type=int, default=int(1.00e+06))
 parser.add_argument("--data-warp", type=int, default=0)
 parser.add_argument("--meas", type=int, default=6)
 parser.add_argument("--meas-angle", type=int, default=180.0)
@@ -80,7 +79,7 @@ parser.add_argument("--meas-bins", type=int, default=75)
 parser.add_argument("--meas-noise", type=float, default=None)
 parser.add_argument("--xmax", type=float, default=3.0)
 
-# Normalizing flow parameters
+# Model
 parser.add_argument("--transforms", type=int, default=3)
 parser.add_argument("--hidden-units", type=int, default=64)
 parser.add_argument("--hidden-layers", type=int, default=3)
@@ -89,24 +88,23 @@ parser.add_argument("--perm", type=int, default=1)
 parser.add_argument("--base-scale", type=float, default=1.0)
 parser.add_argument("--targ-scale", type=float, default=1.0)
 
-# Optimization
+# Training
+parser.add_argument("--batch-size", type=int, default=40000)
+parser.add_argument("--epochs", type=int, default=20)
+parser.add_argument("--iters", type=int, default=500)
 parser.add_argument("--disc", type=str, default="kld", choices=["kld", "mae", "mse"])
-parser.add_argument("--mu", type=float, default=5.0)
-parser.add_argument("--mu-step", type=float, default=10.0)
-parser.add_argument("--mu-scale", type=float, default=1.0)
-parser.add_argument("--mu-max", type=float, default=None)
+parser.add_argument("--penalty", type=float, default=0.0)
+parser.add_argument("--penalty-step", type=float, default=5.0)
+parser.add_argument("--penalty-scale", type=float, default=1.0)
+parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
 parser.add_argument("--atol", type=float, default=0.0)
 parser.add_argument("--cmax", type=float, default=0.0)
 parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
 
-parser.add_argument("--epochs", type=int, default=20)
-parser.add_argument("--iters", type=int, default=1000)
-parser.add_argument("--batch-size", type=int, default=40000)
-
-# Optimizer
+# Optimizer (ADAM)
 parser.add_argument("--lr", type=float, default=0.001)
-parser.add_argument("--lr-min", type=float, default=0.0005)
+parser.add_argument("--lr-min", type=float, default=0.001)
 parser.add_argument("--lr-drop", type=float, default=0.5)
 parser.add_argument("--lr-patience", type=int, default=250)
 parser.add_argument("--weight-decay", type=float, default=0.0)
@@ -114,11 +112,12 @@ parser.add_argument("--weight-decay", type=float, default=0.0)
 # Diagnostics
 parser.add_argument("--check-freq", type=int, default=None)
 parser.add_argument("--vis-freq", type=int, default=None)
-parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
 parser.add_argument("--vis-bins", type=int, default=125)
+parser.add_argument("--vis-maxcols", type=int, default=7)
 parser.add_argument("--vis-res", type=int, default=250)
-parser.add_argument("--fig-ext", type=str, default="png")
+parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
 parser.add_argument("--fig-dpi", type=float, default=300)
+parser.add_argument("--fig-ext", type=str, default="png")
 
 args = parser.parse_args()
 
@@ -144,16 +143,23 @@ def grab(x):
     return x.detach().cpu().numpy()
 
 
-# Create output directory and logger.
+# Create output directories.
 path = pathlib.Path(__file__)
 filepath = os.path.realpath(__file__)
-outdir = os.path.join(path.parent.absolute(), f"data_output/{args.data}/{path.stem}/")
-
+outdir = os.path.join(
+    path.parent.absolute(), 
+    f"data_output/{args.data}/{path.stem}/"
+)
 man = mf.train.ScriptManager(filepath, outdir)
 man.make_folders("checkpoints", "figures")
 
+# Create logger.
 logger = man.get_logger(filename="log.txt")
 logger.info(args)
+
+# Save args.
+with open(man.get_filename("args.pkl"), "wb") as file:
+    pickle.dump(vars(args), file)
 
 # Save a copy of this script.
 shutil.copy(__file__, man.get_filename("script.py"))
@@ -162,28 +168,27 @@ shutil.copy(__file__, man.get_filename("script.py"))
 # Data
 # --------------------------------------------------------------------------------------
 
-# Create ground-truth distribution.
+# Define the input distribution.
 d = 2
-x0 = mf.data.toy.gen_data(
-    name=args.data,
-    size=args.data_size,
-    noise=args.data_noise,
-    shuffle=True,
+dist = mf.data.toy.gen_dist(
+    args.data, 
+    noise=args.data_noise, 
+    shuffle=True, 
     decorr=args.data_decorr,
-    seed=args.seed,
-    warp=args.data_warp,
+    rng=rng,
 )
+
+# Draw samples from the input distribution.
+x0 = dist.sample(args.data_size)
 x0 = cvt(torch.from_numpy(x0))
 
-# Set transfer matrices.
+# Generate lattices.
 angles = np.linspace(0.0, np.radians(args.meas_angle), args.meas, endpoint=False)
 transfer_matrices = []
 for angle in angles:
     matrix = mf.utils.rotation_matrix(angle)
     matrix = cvt(torch.from_numpy(matrix))
     transfer_matrices.append(matrix)
-
-# Generate separate lattice for each optics setting.
 lattices = []
 for matrix in transfer_matrices:
     lattice = mf.lattice.LinearLattice()
@@ -193,7 +198,6 @@ for matrix in transfer_matrices:
 
 # Create 1D histogram diagnostic (x axis).
 xmax = args.xmax
-limits = 2 * [(-xmax, xmax)]
 bin_edges = torch.linspace(-xmax, xmax, args.meas_bins + 1)
 bin_edges = cvt(bin_edges)
 bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
@@ -201,15 +205,13 @@ bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
 
-# Generate histogram measurements.
+# Perform measurements.
 measurements = []
 for lattice in lattices:
     measurement = diagnostic(lattice(x0), kde=False)
     if args.meas_noise:
         measurement = measurement + args.meas_noise * torch.randn(measurement.shape[0])
     measurements.append(measurement)
-
-# Save a numpy version for convenience.
 measurements_np = [grab(measurement) for measurement in measurements]
 
 
@@ -240,7 +242,7 @@ model = mf.MENTFlow(
     lattices=lattices,
     diagnostic=diagnostic,
     measurements=measurements,
-    penalty_parameter=args.mu,
+    penalty_parameter=args.penalty,
     discrepancy_function=args.disc,
 )
 
@@ -254,15 +256,7 @@ cfg = {
         "hidden_layers": args.hidden_layers,
         "randperm": args.perm,
     },
-    "data": {
-        "name": args.data,
-        "size": args.data_size,
-        "noise": args.data_noise,
-        "shuffle": True,
-        "decorr": args.data_decorr,
-        "seed": args.seed,
-        "warp": args.data_warp,
-    },
+    "dist": dist,
 }
 
 with open(man.get_filename("config.pkl"), "wb") as file:
@@ -289,10 +283,10 @@ def make_plots(x, prob, predictions):
 
     # Plot overlayed simulated/measured projections.
     fig, axs = plotting.plot_proj(
-        measurements_np, 
+        measurements_np,
         predictions, 
-        bin_edges=grab(bin_edges), 
-        maxcols=7,
+        bin_edges=grab(diagnostic.bin_edges), 
+        maxcols=args.vis_maxcols,
     )
     figs.append(fig)
 
@@ -324,8 +318,8 @@ def plotter(model):
 
 for method in ["sart", "fbp"]:
     # Reconstruct image and rescale.
-    prob = utils.reconstruct(measurements, angles, method=method, iterations=10)
-    coords = [grab(bin_centers), grab(bin_centers)]
+    prob = utils.reconstruct_tomo(measurements_np, angles, method=method, iterations=10)
+    coords = 2 * [grab(diagnostic.bin_centers)]
     prob, coords = mf.utils.set_image_shape(prob, coords, (args.vis_res, args.vis_res))
 
     # Generate samples from the image.
@@ -390,9 +384,9 @@ trainer.train(
     rtol=args.rtol,
     atol=args.atol,
     cmax=args.cmax,
-    penalty_parameter_step=args.mu_step,
-    penalty_parameter_scale=args.mu_scale,
-    penalty_parameter_max=args.mu_max,
+    penalty_step=args.penalty_step,
+    penalty_scale=args.penalty_scale,
+    penalty_max=args.penalty_max,
     save=True,
     vis_freq=args.vis_freq,
     checkpoint_freq=args.check_freq,

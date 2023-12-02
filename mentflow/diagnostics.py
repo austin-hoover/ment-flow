@@ -1,6 +1,6 @@
-"""Differentiable Kernel Density Estimation (KDE).
+"""Differentiable diagnostics.
 
-KDE code provided by Ryan Roussell (https://link.aps.org/doi/10.1103/PhysRevLett.130.145001).
+KDE code provided by Ryan Roussel (https://link.aps.org/doi/10.1103/PhysRevLett.130.145001).
 """
 from typing import Iterable
 from typing import List
@@ -9,6 +9,8 @@ from typing import Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+
+import mentflow.utils as utils
 
 
 def marginal_pdf(
@@ -104,7 +106,13 @@ def histogram2d(
     return prob
 
 
-class Histogram1D(torch.nn.Module):
+class Diagnostic(torch.nn.Module):
+    """Base class for diagnostic devices."""
+    def __init__(self) -> None:
+        super().__init__()
+
+
+class Histogram1D(Diagnostic):
     """One-dimensional histogram diagnostic."""
     def __init__(
         self,
@@ -126,6 +134,7 @@ class Histogram1D(torch.nn.Module):
         super().__init__()
         self.axis = axis
         self.register_buffer("bin_edges", bin_edges)
+        self.register_buffer("bin_centers", utils.centers_from_edges(self.bin_edges))
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
         self.register_buffer("bandwidth", self.resolution if bandwidth is None else bandwidth)
 
@@ -144,6 +153,7 @@ class Histogram1D(torch.nn.Module):
         hist : tensor
             The estimated probability density.
         """
+        hist = None
         if kde:
             hist = histogram(x[:, self.axis], bin_edges=self.bin_edges, bandwidth=self.bandwidth)
             return hist
@@ -151,9 +161,9 @@ class Histogram1D(torch.nn.Module):
             hist = torch.histogram(x[:, self.axis], bins=self.bin_edges, density=True)
             hist = hist.hist
             return hist
+            
 
-
-class Histogram2D(torch.nn.Module):
+class Histogram2D(Diagnostic):
     """Two-dimensional histogram diagnostic."""
     def __init__(
         self,
@@ -175,6 +185,12 @@ class Histogram2D(torch.nn.Module):
         super().__init__()
         self.axis = axis
         self.register_buffer("bin_edges", torch.nested.nested_tensor(bin_edges))
+        self.register_buffer(
+            "bin_centers",
+            torch.nested.nested_tensor(
+                [utils.centers_from_edges(self.bin_edges[i]) for i in range(len(self.axis))]
+            ),
+        )
 
         d = len(axis)
         resolution = torch.zeros(d)

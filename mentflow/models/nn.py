@@ -23,13 +23,13 @@ class NNGenerator(nn.Module):
         activation = get_activation(activation)
         
         super().__init__()
-        layer_sequence = [nn.Linear(input_features, hidden_units), activation]
+        layers = [nn.Linear(input_features, hidden_units), activation]
         for i in range(hidden_layers):
-            layer_sequence.append(nn.Linear(hidden_units, hidden_units))
-            layer_sequence.append(nn.Dropout(dropout))
-            layer_sequence.append(activation)
-        layer_sequence.append(nn.Linear(hidden_units, output_features))
-        self.stack = nn.Sequential(*layer_sequence)
+            layers.append(nn.Linear(hidden_units, hidden_units))
+            layers.append(nn.Dropout(dropout))
+            layers.append(activation)
+        layers.append(nn.Linear(hidden_units, output_features))
+        self.stack = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.stack(x)

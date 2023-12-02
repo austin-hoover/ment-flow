@@ -1,4 +1,7 @@
 """Methods to estimate entropy from samples."""
+import typing
+from typing import Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,8 +9,9 @@ import torch.nn as nn
 
 class EntropyEstimator(nn.Module):
     """Estimates entropy from samples."""
-    def __init__(self) -> None:
+    def __init__(self, prior=None) -> None:
         super().__init__()
+        self.prior = prior
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
@@ -15,8 +19,8 @@ class EntropyEstimator(nn.Module):
 
 class EmptyEntropyEstimator(EntropyEstimator):
     """Returns zero."""
-    def __init__(self):
-        super().__init__()
+    def __init__(self, prior=None):
+        super().__init__(prior=prior)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return 0.0
@@ -24,8 +28,10 @@ class EmptyEntropyEstimator(EntropyEstimator):
 
 class CovarianceEntropyEstimator(EntropyEstimator):
     """Estimates entropy from covariance matrix."""
-    def __init__(self):
-        super().__init__()
+    def __init__(self, prior=None):
+        if prior is not None:
+            raise ValueError("This class cannot estimate relative entropy (prior != None).")
+        super().__init__(prior=prior)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         eps = torch.sqrt(torch.det(torch.cov(x.T)))
@@ -35,9 +41,11 @@ class CovarianceEntropyEstimator(EntropyEstimator):
 
 class KNNEntropyEstimator(EntropyEstimator):
     """Estimates entropy from k nearest neighbors."""
-    def __init__(self, k: int = 5) -> None:
-        super().__init__()
+    def __init__(self, prior=None, k=5):
+        if prior is not None:
+            raise ValueError("This class cannot estimate relative entropy (prior != None).")
+        super().__init__(prior=prior)
         self.k = k
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return 0.0
+        raise NotImplementedError

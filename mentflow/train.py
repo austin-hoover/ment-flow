@@ -20,7 +20,7 @@ import pandas as pd
 import proplot as pplt
 import torch
 
-from mentflow.core import MENTModel
+from mentflow.core import GenMENT
 from mentflow.utils.logging import ListLogger
 import mentflow.losses
 
@@ -92,7 +92,7 @@ class Monitor:
     """Monitors MENT-Flow traing progress."""
     def __init__(
         self, 
-        model: MENTModel, 
+        model: GenMENT, 
         optimizer: Optional[torch.optim.Optimizer] = None, 
         lr_scheduler: Optional[Any] = None,
         momentum: Optional[float] = 0.95,
@@ -101,7 +101,6 @@ class Monitor:
     ) -> None:
         self.path = path
         self.logger = ListLogger(save=(path is not None), path=path, freq=freq)
-
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
@@ -185,11 +184,11 @@ class Trainer:
     """"Trainer for MENT-Flow model."""
     def __init__(
         self,
-        model: MENTModel,
+        model: GenMENT,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: Any,
         monitor: Monitor,
-        plotter: Callable[[MENTModel], List[plt.Figure]],
+        plotter: Callable[[GenMENT], List[plt.Figure]],
         save: bool = True,
         output_dir: Optional[str] = None,
         precision=torch.float32,
@@ -255,9 +254,9 @@ class Trainer:
         rtol: float = 0.05,
         atol: float = 0.0,
         cmax: float = 0.0,
-        penalty_parameter_step: float = 10.0,
-        penalty_parameter_scale: float = 1.0,
-        penalty_parameter_max: float = None,
+        penalty_step: float = 10.0,
+        penalty_scale: float = 1.0,
+        penalty_max: float = None,
         save: bool = True,
         vis_freq: int = 100,
         checkpoint_freq: int = 100,
@@ -281,11 +280,11 @@ class Trainer:
             Stop if |C| <= cmax. The default is zero (no noise). Note that even in 
             simulated reconstructions without measurement noise, noise can be introduced
             by the particle binning process.
-        penalty_parameter_scale : float
+        penalty_scale : float
             Scales the penalty parameter.
-        penalty_parameter_step: float
+        penalty_step: float
             Steps the penalty parameter.
-        penalty_parameter_max : float
+        penalty_max : float
             Maximum penalty parameter value.
         save : bool
             Whether to save plots and checkpoints.
@@ -300,8 +299,8 @@ class Trainer:
             savefig_kws = dict()
         savefig_kws.setdefault("dpi", 300)
 
-        if not penalty_parameter_max:
-            penalty_parameter_max = float("inf")
+        if penalty_max is None:
+            penalty_max = float("inf")
             
         if not vis_freq:
             vis_freq = iterations
@@ -388,9 +387,10 @@ class Trainer:
             if C_norm <= cmax:
                 print("CONVERGED (cmax)")
                 return 
-            
-            self.model.penalty_parameter += penalty_parameter_step
-            if self.model.penalty_parameter >= penalty_parameter_max:
+
+            self.model.penalty_parameter *= penalty_scale
+            self.model.penalty_parameter += penalty_step
+            if self.model.penalty_parameter >= penalty_max:
                 print("Max penalty parameter reached.")
                 return
             

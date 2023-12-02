@@ -126,16 +126,23 @@ def grab(x):
     return x.detach().cpu().numpy()
 
 
-# Create output directory and logger.
+# Create output directories.
 path = pathlib.Path(__file__)
 filepath = os.path.realpath(__file__)
-outdir = os.path.join(path.parent.absolute(), f"data_output/{args.data}/{path.stem}/")
-
+outdir = os.path.join(
+    path.parent.absolute(), 
+    f"data_output/{args.data}/{path.stem}/"
+)
 man = mf.train.ScriptManager(filepath, outdir)
 man.make_folders("checkpoints", "figures")
 
+# Create logger.
 logger = man.get_logger(filename="log.txt")
 logger.info(args)
+
+# Save args.
+with open(man.get_filename("args.pkl"), "wb") as file:
+    pickle.dump(vars(args), file)
 
 # Save a copy of this script.
 shutil.copy(__file__, man.get_filename("script.py"))
@@ -144,7 +151,7 @@ shutil.copy(__file__, man.get_filename("script.py"))
 # Data
 # --------------------------------------------------------------------------------------
 
-# Create ground-truth distribution.
+# Generate input distribution.
 d = 2
 x0 = mf.data.toy.gen_data(
     name=args.data,
@@ -157,15 +164,13 @@ x0 = mf.data.toy.gen_data(
 )
 x0 = cvt(torch.from_numpy(x0))
 
-# Set transfer matrices.
+# Generate lattices.
 angles = np.linspace(0.0, np.radians(args.meas_angle), args.meas, endpoint=False)
 transfer_matrices = []
 for angle in angles:
     matrix = mf.utils.rotation_matrix(angle)
     matrix = cvt(torch.from_numpy(matrix))
     transfer_matrices.append(matrix)
-
-# Generate separate lattice for each optics setting.
 lattices = []
 for matrix in transfer_matrices:
     lattice = mf.lattice.LinearLattice()
@@ -175,7 +180,6 @@ for matrix in transfer_matrices:
 
 # Create 1D histogram diagnostic (x axis).
 xmax = args.xmax
-limits = 2 * [(-xmax, xmax)]
 bin_edges = torch.linspace(-xmax, xmax, args.meas_bins + 1)
 bin_edges = cvt(bin_edges)
 bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
@@ -183,15 +187,13 @@ bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
 
-# Generate histogram measurements.
+# Perform measurements.
 measurements = []
 for lattice in lattices:
     measurement = diagnostic(lattice(x0), kde=False)
     if args.meas_noise:
         measurement = measurement + args.meas_noise * torch.randn(measurement.shape[0])
     measurements.append(measurement)
-
-# Save a numpy version for convenience.
 measurements_np = [grab(measurement) for measurement in measurements]
 
 
@@ -312,8 +314,8 @@ def plotter(model):
 
 for method in ["sart", "fbp"]:
     # Reconstruct image and rescale.
-    prob = utils.reconstruct(measurements, angles, method=method, iterations=10)
-    coords = [grab(bin_centers), grab(bin_centers)]
+    prob = utils.reconstruct_tomo(measurements_np, angles, method=method, iterations=10)
+    coords = 2 * [grab(diagnostic.bin_centers)]
     prob, coords = mf.utils.set_image_shape(prob, coords, (args.vis_res, args.vis_res))
 
     # Generate samples from the image.
@@ -325,7 +327,7 @@ for method in ["sart", "fbp"]:
     predictions = [grab(prediction) for prediction in predictions]
 
     # Make plots.
-    figs = make_plots(grab(x), predictions)
+    figs = make_plots(grab(x), prob, predictions)
     
     filename = f"fig__test_{method}_00.{args.fig_ext}"
     filename = os.path.join(man.outdir, f"figures/{filename}")
@@ -378,9 +380,9 @@ trainer.train(
     rtol=args.rtol,
     atol=args.atol,
     cmax=args.cmax,
-    penalty_parameter_step=args.mu_step,
-    penalty_parameter_scale=args.mu_scale,
-    penalty_parameter_max=args.mu_max,
+    penalty_parameter_step=args.penalty,
+    penalty_parameter_scale=args.penalty_scale,
+    penalty_parameter_max=args.penalty_max,
     save=True,
     vis_freq=args.vis_freq,
     checkpoint_freq=args.check_freq,
