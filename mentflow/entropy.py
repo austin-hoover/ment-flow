@@ -35,8 +35,8 @@ class CovarianceEntropyEstimator(EntropyEstimator):
         self.pad = pad
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        eps = torch.sqrt(torch.det(torch.cov(x.T)) + self.pad)
-        H = -3.0 * np.log(2.0 * np.pi * np.e) - torch.log(eps)
+        eps = torch.sqrt(torch.det(torch.cov(x.T)))
+        H = -3.0 * np.log(2.0 * np.pi * np.e) - torch.log(eps + self.pad)
         return H
 
 
