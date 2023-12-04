@@ -119,7 +119,7 @@ class GenMENT(nn.Module):
         return C
 
     def loss(self, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
-        """Estimate the loss using a new batch.
+        """Estimate the loss from a new batch.
 
         Parameters
         ----------
@@ -129,8 +129,8 @@ class GenMENT(nn.Module):
         Returns
         -------
         L : tensor
-            H + mu * |C| / len(C), where H is the entropy, C is the discrepancy vector, and
-            |.| is the l1 norm.
+            L = H + mu * |C|, where H is the entropy, C is the discrepancy vector, and |.| is
+            the l1 norm.
         H : tensor
             Estimated entropy. If `self.target` is not None, this is the negative relative entropy,
             or the KL divergence between the model and target distribution. Otherwise we estimate
@@ -140,7 +140,7 @@ class GenMENT(nn.Module):
         """
         x, H = self.sample_and_entropy(batch_size)
         C = self.discrepancy(x)
-        L = H + self.penalty_parameter * (sum(C) / self.n_meas)
+        L = H + self.penalty_parameter * (sum(C) / len(C))
         return (L, H, C)
 
     def parameters(self) -> Iterator[nn.Parameter]:
