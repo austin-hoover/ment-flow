@@ -107,9 +107,28 @@ def histogram2d(
 
 
 class Diagnostic(torch.nn.Module):
-    """Base class for diagnostic devices."""
-    def __init__(self) -> None:
+    """Represents a measurement device."""
+    def __init__(self, transform: Optional[torch.nn.Module] = None) -> None:
+        """Constructor.
+
+        Parameters
+        ----------
+        transform : torch.nn.Module
+            Transformation applied to the particles before measurement. Defaults
+            to the identity transformation.
+        """
         super().__init__()
+        self.transform = transform
+        if self.transform is None:
+            self.transform = torch.nn.Identity()
+
+    def forward(self, x, **kws):
+        """Transform, then measure the particle distribution."""
+        return self._forward(self.transform(x), **kws)
+
+    def _forward(self, x, **kws):
+        """Measure the particle distribution."""
+        raise NotImplementedError
 
 
 class Histogram1D(Diagnostic):
@@ -138,7 +157,7 @@ class Histogram1D(Diagnostic):
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
         self.register_buffer("bandwidth", self.resolution if bandwidth is None else bandwidth)
 
-    def forward(self, x, kde=True):
+    def _forward(self, x, kde=True):
         """Estimate probability density. 
 
         Parameters
@@ -204,7 +223,7 @@ class Histogram2D(Diagnostic):
             bandwidth[i] = bandwidth[i] if bandwidth[i] else self.resolution[i]
         self.register_buffer("bandwidth", torch.tensor(bandwidth))
 
-    def forward(self, x, kde=True):
+    def _forward(self, x, kde=True):
         """Estimate probability density. 
 
         Parameters
