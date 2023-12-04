@@ -179,7 +179,7 @@ bin_edges = torch.linspace(-xmax, xmax, args.meas_bins + 1)
 bin_edges = cvt(bin_edges)
 bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
-diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
+diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges, bandwidth=(0.1 * (bin_edges[1] - bin_edges[0])))
 diagnostic = diagnostic.to(device)
 diagnostics = [diagnostic]
 
