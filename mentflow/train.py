@@ -20,9 +20,10 @@ import pandas as pd
 import proplot as pplt
 import torch
 
-from mentflow.core import GenMENT
-from mentflow.utils.logging import ListLogger
 import mentflow.losses
+from mentflow.core import GenMENT
+from mentflow.utils import unravel
+from mentflow.utils.logging import ListLogger
 
 
 class RunningAverageMeter():
@@ -104,11 +105,10 @@ class Monitor:
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
-        self.n_meas = len(model.measurements)
         self.meters = {
             "L": RunningAverageMeter(momentum=momentum),
             "H": RunningAverageMeter(momentum=momentum),
-            "C": [RunningAverageMeter(momentum=momentum) for _ in range(self.n_meas)],
+            "C": [RunningAverageMeter(momentum=momentum) for _ in unravel(self.model.measurements)],
             "C_norm": RunningAverageMeter(momentum=momentum),
         }
                 
@@ -134,11 +134,9 @@ class Monitor:
 
         self.meters["L"].action(float(L))
         self.meters["H"].action(float(H))
-
-        for i in range(self.n_meas):
+        for i in range(len(C)):
             self.meters["C"][i].action(float(C[i]))
-
-        C_norm = sum(abs(float(C[i])) for i in range(len(C)))
+        C_norm = sum(abs(float(C[i])) for i in range(len(C))) / len(C)
         self.meters["C_norm"].action(C_norm)
 
         if L < self.best_loss:
@@ -155,7 +153,7 @@ class Monitor:
         info["H"] = float(H)
         info["C_norm"] = float(C_norm)
         info["mu"] = self.model.penalty_parameter
-        for i in range(self.n_meas):
+        for i in range(len(C)):
             info[f"C_{i:02.0f}"] = float(C[i])
         self.logger.write(info)
 
@@ -175,7 +173,7 @@ class Monitor:
         self.meters["L"].reset()
         self.meters["H"].reset()
         self.meters["C_norm"].reset()
-        for i in range(self.n_meas):
+        for i in range(len(self.meters["C"])):
             self.meters["C"][i].reset()
         self.best_loss = float("inf")
 
@@ -332,7 +330,6 @@ class Trainer:
 
             for iteration in range(iterations):                
                 self.optimizer.zero_grad()
-                
                 loss, H, C = self.model.loss(batch_size)
     
                 self.monitor.action(
@@ -377,7 +374,7 @@ class Trainer:
                 self.lr_scheduler.step(loss.item())
 
 
-        ## Outer loop: Penalty Method (PM).
+        # Outer loop: Penalty Method (PM).
         
         C_norm_old = float("inf")
         

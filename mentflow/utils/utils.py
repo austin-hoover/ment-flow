@@ -1,3 +1,4 @@
+import itertools
 import math
 import pickle
 
@@ -26,6 +27,10 @@ def is_power_of_two(n):
         return not n & (n - 1)
     else:
         return False
+
+
+def unravel(iterable):
+    return list(itertools.chain.from_iterable(iterable))
 
 
 def get_num_parameters(model):

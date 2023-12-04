@@ -28,13 +28,14 @@ class EmptyEntropyEstimator(EntropyEstimator):
 
 class CovarianceEntropyEstimator(EntropyEstimator):
     """Estimates entropy from covariance matrix."""
-    def __init__(self, prior=None):
+    def __init__(self, prior=None, pad=1.00e-12):
         if prior is not None:
             raise ValueError("This class cannot estimate relative entropy (prior != None).")
         super().__init__(prior=prior)
+        self.pad = pad
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        eps = torch.sqrt(torch.det(torch.cov(x.T)))
+        eps = torch.sqrt(torch.det(torch.cov(x.T)) + self.pad)
         H = -3.0 * np.log(2.0 * np.pi * np.e) - torch.log(eps)
         return H
 

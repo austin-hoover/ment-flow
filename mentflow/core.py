@@ -11,18 +11,19 @@ import torch.nn as nn
 import zuko
 
 import mentflow.losses as losses
+from mentflow.utils import unravel
 
 
 class GenMENT(nn.Module):
     """Generative maximum-entropy tomography (MENT) solver."""
     def __init__(
         self,
-        d : int,
+        d: int,
         flow: Type[nn.Module],
         target: Type[torch.distributions.Distribution],
         lattices: List[Type[nn.Module]],
-        diagnostic: Type[nn.Module],
-        measurements: List[torch.Tensor],
+        diagnostics: List[Type[nn.Module]],
+        measurements: List[List[torch.Tensor]],
         discrepancy_function: str = "kld",
         penalty_parameter: float = 10.0,
     ) -> None:
@@ -33,20 +34,20 @@ class GenMENT(nn.Module):
         d : int
             Dimensionality of the space.
         flow : torch.nn.Module subclass
-            A differentiable model that generates samples and (possibly) evalutes the 
+            A differentiable model that generates samples and (possibly) evalutes the
             probability density.
         target : Distribution
             A prior distribution for relative entropy calculations. It must implement
             `log_prob(x)`. If None, the absolute entropy is used.
         lattices : list[Lattice], shape (n_meas,)
             A list of lattices representing the transformation before each measurement.
-        diagnostic : torch.nn.Module
-            The diagnostic used to measure the distribution after passing through the 
-            lattice. Currently, only one diagnostic can be added.
-        measurements : list[tensor], shape (n_meas,)
+        diagnostics : list[torch.nn.Module]
+            Diagnostics used to measure the distribution after passing through the
+            lattice.
+        measurements : list[list[tensor], shape (len(diagnostics))], shape (n_meas,)
             The measurement data.
         penalty_parameter : float
-            Penalty parameter for the loss function (loss = entropy + penalty_parameter * discrepancy).
+            Loss = entropy + penalty_parameter * discrepancy.
         discrepancy_function : {"kld", "mae", "mse"}
             Function used to estimate discrepancy between simulated and measured projections.
             - "kld": KL divergence
@@ -59,7 +60,10 @@ class GenMENT(nn.Module):
         self.flow = flow
         self.target = target
         self.lattices = lattices
-        self.diagnostic = diagnostic
+        self.diagnostics = diagnostics
+        if self.diagnostics is None:
+            self.diagnostics = []
+        self.n_diag = len(self.diagnostics)
         self.set_measurements(measurements)
         self.penalty_parameter = penalty_parameter
         self.discrepancy_function = {
@@ -68,13 +72,13 @@ class GenMENT(nn.Module):
             "kld": losses.kld,
         }[discrepancy_function]
 
-    def set_measurements(self, measurements: List[torch.Tensor]):
+    def set_measurements(self, measurements: List[List[torch.Tensor]]):
         self.n_meas = 0
         if measurements:
             self.n_meas = len(measurements)
         self.measurements = measurements
 
-    def simulate(self, x: torch.Tensor, **kws) -> List[torch.Tensor]:
+    def simulate(self, x: torch.Tensor, **kws) -> List[List[torch.Tensor]]:
         """Simulate the measurements.
 
         Parameters
@@ -86,13 +90,13 @@ class GenMENT(nn.Module):
 
         Returns
         -------
-        predictions : list[tensor], shape (n_meas,)
+        predictions : list[list[tensor], shape (n_diag)], shape (n_meas,)
             The simulated measurements.
         """
         predictions = []
         for lattice in self.lattices:
-            prediction = self.diagnostic(lattice(x), **kws)
-            predictions.append(prediction)
+            x_out = lattice(x)
+            predictions.append([diagnostic(x_out, **kws) for diagnostic in self.diagnostics])
         return predictions
 
     def discrepancy(self, x: torch.Tensor) -> List[torch.Tensor]:
@@ -105,20 +109,17 @@ class GenMENT(nn.Module):
 
         Returns
         -------
-        C : list, shape (n_meas,)
+        C : list, shape (n_meas * n_diag,)
             The discrepancy vector.
         """
         predictions = self.simulate(x)
-        C = self.n_meas * [0.0]
-        for i in range(self.n_meas):
-            C[i] = self.discrepancy_function(predictions[i], self.measurements[i])
+        C = []
+        for prediction, measurement in zip(unravel(predictions), unravel(self.measurements)):
+            C.append(self.discrepancy_function(prediction, measurement))
         return C
 
     def loss(self, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
-        """Compute the Penalty Method (PM) loss using a new batch.
-        
-        L = H + mu * |C| / n_meas, where H is the entropy, C is the discrepancy vector, 
-        and |.| is the l1 norm.
+        """Estimate the loss using a new batch.
 
         Parameters
         ----------
@@ -128,11 +129,13 @@ class GenMENT(nn.Module):
         Returns
         -------
         L : tensor
+            H + mu * |C| / len(C), where H is the entropy, C is the discrepancy vector, and
+            |.| is the l1 norm.
         H : tensor
             Estimated entropy. If `self.target` is not None, this is the negative relative entropy,
             or the KL divergence between the model and target distribution. Otherwise we estimate
             the absolute entropy.
-        C : tensor, shape (n_meas,)
+        C : tensor, shape (n_meas * n_diag,)
             The discrepancy vector.
         """
         x, H = self.sample_and_entropy(batch_size)
@@ -167,21 +170,21 @@ class GenMENT(nn.Module):
             "flow": self.flow.state_dict(),
             "target": self.target,
             "lattices": self.lattices,
-            "diagnostic": self.diagnostic,
+            "diagnostics": self.diagnostics,
             "measurements": self.measurements,
         }
         torch.save(state, path)
 
     def load(self, path: str, device: Optional[torch.device] = None) -> None:
         """Load the model parameters from a binary file."""
-        state = torch.load(path, map_location=device)        
+        state = torch.load(path, map_location=device)
         try:
             self.flow.load_state_dict(state["flow"])
         except RuntimeError:
             raise RuntimeError("Error loading flow. Architecture mismatch?")
         self.target = state["target"]
         self.lattices = state["lattices"]
-        self.diagnostic = state["diagnostic"]
+        self.diagnostics = state["diagnostics"]
         self.measurements = state["measurements"]
         self.to(device)
 
@@ -190,15 +193,16 @@ class GenMENT(nn.Module):
         if self.lattices is not None:
             for i in range(len(self.lattices)):
                 self.lattices[i] = self.lattices[i].to(device)
-        if self.diagnostic is not None:
-            self.diagnostic = self.diagnostic.to(device)
+        if len(self.diagnostics) > 0:
+            for j in range(len(self.diagnostics)):
+                self.diagnostics[j] = self.diagnostics[j].to(device)
         if self.flow is not None:
             self.flow = self.flow.to(device)
         return self
 
 
 class MENTFlow(GenMENT):
-    """GenMENT model using normalizing flow (invertible neural network)."""
+    """GenMENT model using normalizing flow (invertible neural network) as generator."""
     def __init__(self, flow: zuko.flows.Flow, **kws) -> None:
         """Constructor.
 
@@ -206,7 +210,8 @@ class MENTFlow(GenMENT):
         ----------
         flow : zuko.flows.Flow
             A normalizing flow model. We use the `zuko` package (https://github.com/probabilists/zuko).
-            The base distribution is defined within the flow object.
+            The base distribution is defined within the flow object. Note that is a constructor in
+            zuko, so we need to call `flow()` to return a flow object.
         **kws
             Key word arguments passed `GenMENT`.
         """
@@ -232,7 +237,7 @@ class MENTFlow(GenMENT):
 
 
 class MENTNN(GenMENT):
-    """GenMENT model using non-invertible neural network."""
+    """GenMENT model using non-invertible neural network as generator."""
     def __init__(
         self,
         flow: Type[nn.Module],
@@ -245,7 +250,7 @@ class MENTNN(GenMENT):
         Parameters
         ----------
         flow : torch.nn.Module
-            A feedforward neural network. The network transforms a d'-dimensional base 
+            A feedforward neural network. The network transforms a d'-dimensional base
             distribution to a d-dimensional data distribution.
         base : torch.distributions.Distribution
             The base distribution. Defaults to d-dimensional Gaussian distribution.

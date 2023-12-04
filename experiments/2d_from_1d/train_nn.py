@@ -1,4 +1,4 @@
-"""Train 2D neural network model with emittance entropy estimator."""
+"""Train 2D neural network generator on linear 1D projections."""
 import argparse
 import copy
 import functools
@@ -18,12 +18,14 @@ import proplot as pplt
 import zuko
 
 import mentflow as mf
+from mentflow.utils import unravel
 
 # Local
 import plotting
 import utils
 
 
+# Plot settings
 pplt.rc["cmap.discrete"] = False
 pplt.rc["cmap.sequential"] = "viridis"
 pplt.rc["cycle"] = "538"
@@ -39,9 +41,9 @@ parser.add_argument("--seed", type=int, default=None)
 
 # Data
 parser.add_argument(
-    "--data", 
-    type=str, 
-    default="swissroll", 
+    "--data",
+    type=str,
+    default="swissroll",
     choices=[
         "circles",
         "gaussians",
@@ -51,11 +53,11 @@ parser.add_argument(
         "spirals",
         "swissroll",
         "waterbag",
-    ]
+    ],
 )
 parser.add_argument("--data-decorr", type=int, default=0)
 parser.add_argument("--data-noise", type=float, default=None)
-parser.add_argument("--data-size", type=int, default=int(1.00e+06))
+parser.add_argument("--data-size", type=int, default=int(1.00e06))
 parser.add_argument("--data-warp", type=int, default=0)
 parser.add_argument("--meas", type=int, default=6)
 parser.add_argument("--meas-angle", type=int, default=180.0)
@@ -77,8 +79,8 @@ parser.add_argument("--batch-size", type=int, default=40000)
 parser.add_argument("--epochs", type=int, default=20)
 parser.add_argument("--iters", type=int, default=500)
 parser.add_argument("--disc", type=str, default="kld", choices=["kld", "mae", "mse"])
-parser.add_argument("--penalty", type=float, default=0.0)
-parser.add_argument("--penalty-step", type=float, default=5.0)
+parser.add_argument("--penalty", type=float, default=1000.0)
+parser.add_argument("--penalty-step", type=float, default=0.0)
 parser.add_argument("--penalty-scale", type=float, default=1.0)
 parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
@@ -99,7 +101,7 @@ parser.add_argument("--vis-freq", type=int, default=None)
 parser.add_argument("--vis-bins", type=int, default=125)
 parser.add_argument("--vis-maxcols", type=int, default=7)
 parser.add_argument("--vis-res", type=int, default=250)
-parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
+parser.add_argument("--vis-size", type=int, default=int(1.00e06))
 parser.add_argument("--fig-dpi", type=float, default=300)
 parser.add_argument("--fig-ext", type=str, default="png")
 
@@ -108,6 +110,17 @@ args = parser.parse_args()
 
 # Setup
 # --------------------------------------------------------------------------------------
+
+# Create output directories.
+path = pathlib.Path(__file__)
+filepath = os.path.realpath(__file__)
+outdir = os.path.join(path.parent.absolute(), f"data_output/{args.data}/{path.stem}/")
+man = mf.train.ScriptManager(filepath, outdir)
+man.make_dirs("checkpoints", "figures")
+
+# Save args and copy of this scripts.
+mf.utils.save_pickle(vars(args), man.get_path("args.pkl"))
+shutil.copy(__file__, man.get_path("script.py"))
 
 # Set random seed.
 rng = np.random.default_rng(seed=args.seed)
@@ -119,29 +132,13 @@ device = torch.device(args.device)
 precision = torch.float32
 torch.set_default_dtype(precision)
 
-# Convenience functions
+
 def cvt(x):
     return x.type(precision).to(device)
 
+
 def grab(x):
     return x.detach().cpu().numpy()
-
-
-# Create output directories.
-path = pathlib.Path(__file__)
-filepath = os.path.realpath(__file__)
-outdir = os.path.join(
-    path.parent.absolute(), 
-    f"data_output/{args.data}/{path.stem}/"
-)
-man = mf.train.ScriptManager(filepath, outdir)
-man.make_dirs("checkpoints", "figures")
-
-# Save args.
-mf.utils.save_pickle(vars(args), man.get_path("args.pkl"))
-
-# Save a copy of this script.
-shutil.copy(__file__, man.get_path("script.py"))
 
 
 # Data
@@ -150,9 +147,9 @@ shutil.copy(__file__, man.get_path("script.py"))
 # Define the input distribution.
 d = 2
 dist = mf.data.toy.gen_dist(
-    args.data, 
-    noise=args.data_noise, 
-    shuffle=True, 
+    args.data,
+    noise=args.data_noise,
+    shuffle=True,
     decorr=args.data_decorr,
     rng=rng,
 )
@@ -176,7 +173,7 @@ for matrix in transfer_matrices:
     lattice.set_matrix(matrix)
     lattices.append(lattice)
 
-# Create 1D histogram diagnostic (x axis).
+# Create histogram diagnostic (x axis).
 xmax = args.xmax
 bin_edges = torch.linspace(-xmax, xmax, args.meas_bins + 1)
 bin_edges = cvt(bin_edges)
@@ -184,15 +181,17 @@ bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
 diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
+diagnostics = [diagnostic]
 
 # Perform measurements.
 measurements = []
 for lattice in lattices:
-    measurement = diagnostic(lattice(x0), kde=False)
-    if args.meas_noise:
-        measurement = measurement + args.meas_noise * torch.randn(measurement.shape[0])
-    measurements.append(measurement)
-measurements_np = [grab(measurement) for measurement in measurements]
+    measurements.append([])
+    for diagnostic in diagnostics:
+        measurement = diagnostic(lattice(x0), kde=False)
+        if args.meas_noise:
+            measurement = measurement + args.meas_noise * torch.randn(measurement.shape[0])
+        measurements[-1].append(measurement)
 
 
 # Model
@@ -228,7 +227,6 @@ else:
     entropy_estimator = mf.entropy.EmptyEntropyEstimator()
 entropy_estimator = entropy_estimator.to(device)
 
-
 model = mf.MENTNN(
     d=d,
     flow=flow,
@@ -236,13 +234,12 @@ model = mf.MENTNN(
     target=target,
     entropy_estimator=entropy_estimator,
     lattices=lattices,
-    diagnostic=diagnostic,
+    diagnostics=diagnostics,
     measurements=measurements,
     penalty_parameter=args.penalty,
     discrepancy_function=args.disc,
 )
-    
-# Save config for evaluation.
+
 cfg = {
     "flow": {
         "input_features": d,
@@ -258,39 +255,35 @@ cfg = {
 mf.utils.save_pickle(cfg, man.get_path("cfg.pkl"))
 
 
-# Diagnostics
-# --------------------------------------------------------------------------------------
-
-
 def make_plots(x, predictions):
     figs = []
 
-    # Plot the ground-truth samples, model samples, and model density.
+    # Plot the true samples and model samples.
     fig, axs = plotting.plot_dist(
         dist.sample(args.vis_size),
         x,
-        coords=([np.linspace(-xmax, xmax, s) for s in prob.shape]), 
-        n_bins=args.vis_bins, 
-        limits=(2 * [(-xmax, xmax)]), 
+        coords=([np.linspace(-xmax, xmax, s) for s in prob.shape]),
+        n_bins=args.vis_bins,
+        limits=(2 * [(-xmax, xmax)]),
     )
     figs.append(fig)
 
     # Plot overlayed simulated/measured projections.
     fig, axs = plotting.plot_proj(
-        measurements_np,
-        predictions, 
-        bin_edges=grab(diagnostic.bin_edges), 
+        [grab(measurement) for measurement in unravel(measurements)],
+        predictions,
+        bin_edges=grab(diagnostic.bin_edges),
         maxcols=args.vis_maxcols,
     )
     figs.append(fig)
 
     return figs
-     
+
 
 def plotter(model):
     x = cvt(model.sample(args.vis_size))
     predictions = model.simulate(x, kde=False)
-    predictions = [grab(prediction) for prediction in predictions]
+    predictions = [grab(prediction) for prediction in unravel(predictions)]
     return make_plots(grab(x), predictions)
 
 
@@ -298,22 +291,19 @@ def plotter(model):
 # --------------------------------------------------------------------------------------
 
 for method in ["sart", "fbp"]:
-    # Reconstruct image and rescale.
-    prob = utils.reconstruct_tomo(measurements_np, angles, method=method, iterations=10)
+    _measurements = [grab(measurement) for measurement in unravel(measurements)]
+    prob = utils.reconstruct_tomo(_measurements, angles, method=method, iterations=10)
     coords = 2 * [grab(diagnostic.bin_centers)]
     prob, coords = mf.utils.set_image_shape(prob, coords, (args.vis_res, args.vis_res))
 
-    # Generate samples from the image.
     x = mf.utils.sample_hist(prob, coords=coords, n=args.vis_size)
     x = cvt(torch.from_numpy(x))
 
-    # Simulate the measurements.
     predictions = model.simulate(x, kde=False)
-    predictions = [grab(prediction) for prediction in predictions]
+    _predictions = [grab(prediction) for prediction in unravel(predictions)]
 
-    # Make plots.
-    figs = make_plots(grab(x), predictions)
-    
+    figs = make_plots(grab(x), _predictions)
+
     filename = f"fig__test_{method}_00.{args.fig_ext}"
     filename = os.path.join(man.outdir, f"figures/{filename}")
     figs[0].savefig(filename, dpi=args.fig_dpi)
@@ -328,24 +318,19 @@ for method in ["sart", "fbp"]:
 # --------------------------------------------------------------------------------------
 
 optimizer = torch.optim.AdamW(
-    model.parameters(), 
-    lr=args.lr, 
+    model.parameters(),
+    lr=args.lr,
     weight_decay=args.weight_decay,
 )
 
 lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer,
-    min_lr=args.lr_min, 
-    patience=args.lr_patience, 
+    min_lr=args.lr_min,
+    patience=args.lr_patience,
     factor=args.lr_drop,
 )
 
-monitor = mf.train.Monitor(
-    model=model, 
-    momentum=0.98, 
-    freq=1,
-    path=man.get_path("history.pkl")
-)
+monitor = mf.train.Monitor(model=model, momentum=0.98, freq=1, path=man.get_path("history.pkl"))
 
 trainer = mf.train.Trainer(
     model=model,
@@ -353,7 +338,7 @@ trainer = mf.train.Trainer(
     lr_scheduler=lr_scheduler,
     monitor=monitor,
     plotter=plotter,
-    output_dir=man.outdir,   
+    output_dir=man.outdir,
     precision=precision,
     device=device,
 )

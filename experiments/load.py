@@ -57,7 +57,7 @@ def setup_model(cfg):
         target=None, 
         lattices=None,
         measurements=None, 
-        diagnostic=None
+        diagnostics=None
     )
     return model
 
@@ -123,7 +123,7 @@ def setup_model_nn(cfg):
         target=None, 
         lattices=None,
         measurements=None, 
-        diagnostic=None
+        diagnostics=None
     )
     return model
 

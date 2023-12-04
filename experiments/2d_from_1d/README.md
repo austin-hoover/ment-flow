@@ -1,1 +1,1 @@
-Two-dimensional toy distributions.
+## 2D reconstruction from 1D projections
