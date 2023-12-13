@@ -24,10 +24,10 @@ class LinearLattice(Lattice):
         self.matrix_inv = torch.linalg.inv(self.matrix)   
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.linear(x, self.matrix.T)
+        return torch.nn.functional.linear(x, self.matrix)
 
     def inverse(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.nn.functional.linear(x, self.matrix_inv.T)
+        return torch.nn.functional.linear(x, self.matrix_inv)
 
     def to(self, device):
         self.matrix = self.matrix.to(device)
