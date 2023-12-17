@@ -1,3 +1,9 @@
+"""Iterative maximum-entropy tomography (MENT) solvers.
+
+References
+----------
+[1] https://doi.org/10.1103/PhysRevAccelBeams.25.042801
+"""
 import numpy as np
 import scipy.interpolate
 
@@ -5,8 +11,15 @@ from mentflow.utils import get_grid_points
 from mentflow.utils import sample_hist
 
 
-class MENT:
-    """2D MENT reconstruction model."""
+class MENT_2D:
+    """2D MENT reconstruction model.
+
+    TODO
+    ----
+    - Fix the update step. The current version is not completely converging.
+    - Use torch.
+    - Match to upstream stucture for easier comparison.
+    """
     def __init__(self, transfer_matrices=None, measurements=None, edges=None, prior=None):
         self.transfer_matrices = transfer_matrices
         self.measurements = measurements
@@ -32,12 +45,16 @@ class MENT:
         )
         return idx.astype(float)
 
-    def prob(self, x):
+    def prob(self, x, exclude=-1):
         """Return probability density at points x."""
+        idx = list(range(len(self.measurements)))
+        if exclude >= 0:
+            idx = [i for i in idx if i != exclude]
+    
         _prob = np.zeros(len(x))
-        for i, (measurement, matrix) in enumerate(zip(self.measurements, self.transfer_matrices)):
-            x_out = np.matmul(x, matrix.T)
-            for j in range(len(measurement)):
+        for i in idx:
+            x_out = np.matmul(x, self.transfer_matrices[i].T)
+            for j in range(len(self.measurements[i])):
                 _prob += self.chi(x_out, i, j) * self.lagrange_multipliers[i][j]
         return _prob * self.prior.prob(x)
     
@@ -51,7 +68,7 @@ class MENT:
 
         for i in range(len(self.lagrange_multipliers)):
             # Compute the integrand using the existing lagrange multipliers.
-            prob = self.prob(grid_points)
+            prob = self.prob(grid_points, exclude=i)
             matrix = self.transfer_matrices[i]
             grid_points_out = np.matmul(grid_points, matrix.T)
             prob_out = prob  # unit determinant
@@ -91,6 +108,7 @@ class MENT:
                 
 
 class GaussianDistribution:
+    """Gaussian prior distribution."""
     def __init__(self, scale=1.0):
         self.scale = scale
     
@@ -99,6 +117,7 @@ class GaussianDistribution:
 
 
 class UniformDistribution:
+    """Uniform prior distribution."""
     def __init__(self, scale=100.0, d=2):
         self.scale = scale
         self.d = d

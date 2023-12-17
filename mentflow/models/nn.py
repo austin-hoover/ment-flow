@@ -1,5 +1,16 @@
+"""Neural network generator.
+
+References
+----------
+[1] https://doi.org/10.1103/PhysRevLett.130.145001
+"""
+import typing
+from typing import Tuple
+
 import torch    
 import torch.nn as nn
+
+from mentflow.types_ import TrainableDistribution
 
 
 def get_activation(activation):
@@ -10,14 +21,14 @@ def get_activation(activation):
     return activations[activation]
     
 
-class NNGenerator(nn.Module):
+class NNTransformer(nn.Module):
     def __init__(
         self,
         input_features: int = 2,
         output_features: int = 2,
         hidden_layers: int = 3,
         hidden_units: int = 64,
-        dropout: float =0.0,
+        dropout: float = 0.0,
         activation="tanh",
     ) -> None:
         activation = get_activation(activation)
@@ -33,3 +44,25 @@ class NNGenerator(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.stack(x)
+
+
+class NNGenerator(TrainableDistribution):
+    def __init__(self, d=2, **transformer_kws) -> None:
+        super().__init__()
+        self.base = torch.distributions.Normal(loc=torch.zeros(d), scale=torch.ones(d))
+
+    def sample(self, n: int) -> torch.Tensor:
+        x = self.base.rsample((n,))
+        x = self.transformer(x)
+        return x
+
+    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        return None
+
+    def sample_and_log_prob(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self.sample(n)
+        log_prob = None
+        return (x, None)
+
+        
+        
