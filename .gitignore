@@ -1,4 +1,5 @@
 __pycache__
-data_output
+output
 .ipynb_checkpoints
 .DS_Store
+
