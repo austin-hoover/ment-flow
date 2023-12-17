@@ -70,11 +70,16 @@ def load_model(cfg, path):
 
 
 def load_run(folder):
-    """Load all data from run."""
-    args = mf.utils.load_pickle(os.path.join(folder, "args.pkl"))
-    cfg = mf.utils.load_pickle(os.path.join(folder, "cfg.pkl"))
-    dist = mf.utils.load_pickle(os.path.join(folder, "dist.pkl"))
-    history = mf.utils.load_pickle(os.path.join(folder, "history.pkl"))
+    """Load all data from run."""    
+    def _load_pickle(path):
+        if os.path.exists(path):
+            return mf.utils.load_pickle(path)
+        return None
+
+    args =  _load_pickle(os.path.join(folder, "args.pkl"))
+    cfg =  _load_pickle(os.path.join(folder, "cfg.pkl"))
+    history =  _load_pickle(os.path.join(folder, "history.pkl"))
+    dist =  _load_pickle(os.path.join(folder, "dist.pkl"))
 
     model = setup_model(cfg)
     model.eval()
@@ -137,10 +142,10 @@ def load_model_nn(cfg, path):
 
 def load_run_nn(folder):
     """Load all data from run (MENT-NN)."""
-    args = mf.utils.load_pickle(os.path.join(folder, "args.pkl"))
-    cfg = mf.utils.load_pickle(os.path.join(folder, "cfg.pkl"))
-    dist = mf.utils.load_pickle(os.path.join(folder, "dist.pkl"))
-    history = mf.utils.load_pickle(os.path.join(folder, "history.pkl"))
+    args =  _load_pickle(os.path.join(folder, "args.pkl"))
+    cfg =  _load_pickle(os.path.join(folder, "cfg.pkl"))
+    history =  _load_pickle(os.path.join(folder, "history.pkl"))
+    dist =  _load_pickle(os.path.join(folder, "dist.pkl"))
 
     model = setup_model_nn(cfg)
     model.eval()
