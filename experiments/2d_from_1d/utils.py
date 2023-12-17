@@ -26,7 +26,7 @@ def reconstruct_tomo(measurements, angles, method="sart", iterations=10):
         The reconstructed distribution.
     """
     radon_image = np.vstack(measurements).T
-    angles = np.degrees(angles)
+    angles = np.degrees(-angles)
     
     image = None
     if method == "fbp":
