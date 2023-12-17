@@ -20,8 +20,11 @@ import pandas as pd
 import proplot as pplt
 import torch
 
-import mentflow.losses
-from mentflow.core import GenMENT
+from mentflow.core import MENTFlow
+
+from mentflow.diagnostics import Histogram1D
+from mentflow.diagnostics import kde_histogram_1d
+
 from mentflow.utils import unravel
 from mentflow.utils.logging import ListLogger
 
@@ -93,7 +96,7 @@ class Monitor:
     """Monitors MENT-Flow traing progress."""
     def __init__(
         self, 
-        model: GenMENT, 
+        model: MENTFlow, 
         optimizer: Optional[torch.optim.Optimizer] = None, 
         lr_scheduler: Optional[Any] = None,
         momentum: Optional[float] = 0.95,
@@ -108,8 +111,8 @@ class Monitor:
         self.meters = {
             "L": RunningAverageMeter(momentum=momentum),
             "H": RunningAverageMeter(momentum=momentum),
-            "C": [RunningAverageMeter(momentum=momentum) for _ in unravel(self.model.measurements)],
-            "C_norm": RunningAverageMeter(momentum=momentum),
+            "D": [RunningAverageMeter(momentum=momentum) for _ in unravel(self.model.measurements)],
+            "D_norm": RunningAverageMeter(momentum=momentum),
         }
                 
         self.start_time = None
@@ -122,7 +125,7 @@ class Monitor:
         iteration : int, 
         L: float, 
         H: float, 
-        C: List[float], 
+        D: List[float], 
         batch_size: int
     ) -> None:
         """Update history array."""
@@ -134,10 +137,10 @@ class Monitor:
 
         self.meters["L"].action(float(L))
         self.meters["H"].action(float(H))
-        for i in range(len(C)):
-            self.meters["C"][i].action(float(C[i]))
-        C_norm = sum(abs(float(C[i])) for i in range(len(C))) / len(C)
-        self.meters["C_norm"].action(C_norm)
+        for i in range(len(D)):
+            self.meters["D"][i].action(float(D[i]))
+        D_norm = sum(abs(float(D[i])) for i in range(len(D))) / len(D)
+        self.meters["D_norm"].action(D_norm)
 
         if L < self.best_loss:
             self.best_loss = L
@@ -151,10 +154,10 @@ class Monitor:
         info["lr"] = lr
         info["L"] = float(L)
         info["H"] = float(H)
-        info["C_norm"] = float(C_norm)
+        info["D_norm"] = float(D_norm)
         info["mu"] = self.model.penalty_parameter
-        for i in range(len(C)):
-            info[f"C_{i:02.0f}"] = float(C[i])
+        for i in range(len(D)):
+            info[f"D_{i:02.0f}"] = float(D[i])
         self.logger.write(info)
 
         message = "epoch={:02.0f} iter={:05.0f} t={:0.2f} L={:0.2e} H={:0.2e} C={:0.2e} lr={} batch={:0.2e}".format(
@@ -163,7 +166,7 @@ class Monitor:
             time_ellapsed,
             float(L),
             float(H),
-            float(C_norm),
+            float(D_norm),
             lr,
             batch_size,
         )
@@ -172,9 +175,9 @@ class Monitor:
     def reset(self) -> None:
         self.meters["L"].reset()
         self.meters["H"].reset()
-        self.meters["C_norm"].reset()
-        for i in range(len(self.meters["C"])):
-            self.meters["C"][i].reset()
+        self.meters["D_norm"].reset()
+        for i in range(len(self.meters["D"])):
+            self.meters["D"][i].reset()
         self.best_loss = float("inf")
 
 
@@ -182,11 +185,11 @@ class Trainer:
     """"Trainer for MENT-Flow model."""
     def __init__(
         self,
-        model: GenMENT,
+        model: MENTFlow,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: Any,
         monitor: Monitor,
-        plotter: Callable[[GenMENT], List[plt.Figure]],
+        plotter: Callable[[MENTFlow], List[plt.Figure]],
         save: bool = True,
         output_dir: Optional[str] = None,
         precision=torch.float32,
@@ -200,7 +203,7 @@ class Trainer:
         self.device = device
         self.precision = precision
         self.save = save
-
+        
         self.monitor.optimizer = optimizer
         self.monitor.lr_scheduler = lr_scheduler        
 
@@ -229,11 +232,8 @@ class Trainer:
     def make_and_save_plots(self, epoch: int, iteration: int, save=False, **savefig_kws) -> None:
         if self.plotter is None:
             return
-            
         ext = savefig_kws.pop("ext", "png")
-
         figures = self.plotter(self.model)
-
         for index, figure in enumerate(figures):
             if save:
                 filename = f"fig_{index:02.0f}_{self.get_prefix(epoch, iteration)}.{ext}"
@@ -272,7 +272,7 @@ class Trainer:
         
         The `cmax` parameter defines the convergence condition --- the maximum allowed L1 norm
         of the discrepancy vector C, divided by the length of C. Training will cease as soon 
-        as |C| <= cmax * len(C). The ideal stopping point is usually clear from a plot of |C| 
+        as |D| <= dmax * len(D). The ideal stopping point is usually clear from a plot of |C| 
         vs. iteration number. Eventually, large increases in H will be required for very 
         small decreases in |C|; we want to stop before this occurs.
         
@@ -288,9 +288,9 @@ class Trainer:
         batch_size : int
             Number of particles sampled on each forward 
         rtol : float
-            Stop if |C| > (1 - rtol) * |C_old|. Default = 0.05.
+            Stop if |D| > (1 - rtol) * |D_old|. Default = 0.05.
         atol : float
-            Stop if |C_old| - |C| < atol. Default = 0 (no progress).
+            Stop if |D_old| - |D| < atol. Default = 0 (no progress).
         cmax : float
             Stop if |C| <= cmax. The default is zero (no noise). Note that even in 
             simulated reconstructions without measurement noise, noise can be introduced
@@ -327,17 +327,16 @@ class Trainer:
         def train_epoch(epoch):
             """Train one epoch (inner loop)."""
             self.monitor.reset()
-
             for iteration in range(iterations):                
                 self.optimizer.zero_grad()
-                loss, H, C = self.model.loss(batch_size)
+                loss, H, D = self.model.loss(batch_size)
     
                 self.monitor.action(
                     epoch=epoch,
                     iteration=iteration,
                     L=loss,
                     H=H,
-                    C=C,
+                    D=D,
                     batch_size=batch_size,
                 )
                 
@@ -367,7 +366,7 @@ class Trainer:
                         self.model.save(os.path.join(self.checkpoint_dir, filename))
                         self.model.load_state_dict(curr_state_dict)
 
-                ## To do: compute T = 0.5 * | grad(C) / |grad(C)| - grad(H) / |grad(H)| |^2 = 0.
+                ## To do: compute T = 0.5 * | grad(D) / |grad(D)| - grad(D) / |grad(H)| |^2 = 0.
                 ## T = 0 when entropy is maximized.
                 # ...
         
@@ -376,7 +375,7 @@ class Trainer:
 
         # Outer loop: Penalty Method (PM).
         
-        C_norm_old = float("inf")
+        D_norm_old = float("inf")
         
         for epoch in range(epochs):
             print("epoch={}".format(epoch))
@@ -384,21 +383,21 @@ class Trainer:
 
             train_epoch(epoch)
             
-            C_norm = self.monitor.meters["C_norm"].avg  
+            D_norm = self.monitor.meters["D_norm"].avg  
             
-            print("C_norm={}".format(C_norm))
-            print("C_norm_old={}".format(C_norm_old))
-            print("frac={}".format(C_norm / C_norm_old))
-            print("diff={}".format(C_norm - C_norm_old))
+            print("D_norm={}".format(D_norm))
+            print("D_norm_old={}".format(D_norm_old))
+            print("frac={}".format(D_norm / D_norm_old))
+            print("diff={}".format(D_norm - D_norm_old))
 
             converged = False
-            if C_norm > (1.0 - rtol) * C_norm_old:
+            if D_norm > (1.0 - rtol) * D_norm_old:
                 print("CONVERGED (rtol)")
                 return
-            if C_norm_old - C_norm < atol:
+            if D_norm_old - D_norm < atol:
                 print("CONVERGED (atol)")
                 return
-            if C_norm <= cmax:
+            if D_norm <= cmax:
                 print("CONVERGED (cmax)")
                 return 
 
@@ -408,4 +407,4 @@ class Trainer:
                 print("Max penalty parameter reached.")
                 return
             
-            C_norm_old = C_norm
+            D_norm_old = D_norm

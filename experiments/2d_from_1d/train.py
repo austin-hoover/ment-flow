@@ -18,7 +18,9 @@ import proplot as pplt
 import zuko
 
 import mentflow as mf
+from mentflow.utils import grab
 from mentflow.utils import unravel
+from mentflow.wrappers import WrappedZukoFlow
 
 # Local
 import plotting
@@ -80,7 +82,7 @@ parser.add_argument("--epochs", type=int, default=20)
 parser.add_argument("--iters", type=int, default=500)
 parser.add_argument("--disc", type=str, default="kld", choices=["kld", "mae", "mse"])
 parser.add_argument("--penalty", type=float, default=0.0)
-parser.add_argument("--penalty-step", type=float, default=10.0)
+parser.add_argument("--penalty-step", type=float, default=20.0)
 parser.add_argument("--penalty-scale", type=float, default=1.1)
 parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
@@ -114,7 +116,7 @@ args = parser.parse_args()
 # Create output directories.
 path = pathlib.Path(__file__)
 filepath = os.path.realpath(__file__)
-outdir = os.path.join(path.parent.absolute(), f"data_output/{args.data}/{path.stem}/")
+outdir = os.path.join(path.parent.absolute(), f"output/{args.data}/{path.stem}/")
 man = mf.train.ScriptManager(filepath, outdir)
 man.make_dirs("checkpoints", "figures")
 
@@ -133,13 +135,9 @@ precision = torch.float32
 torch.set_default_dtype(precision)
 
 
-def cvt(x):
+def send(x):
     return x.type(precision).to(device)
-
-
-def grab(x):
-    return x.detach().cpu().numpy()
-
+    
 
 # Data
 # --------------------------------------------------------------------------------------
@@ -157,52 +155,42 @@ mf.utils.save_pickle(dist, man.get_path("dist.pkl"))
 
 # Draw samples from the input distribution.
 x0 = dist.sample(args.data_size)
-x0 = cvt(torch.from_numpy(x0))
+x0 = send(torch.from_numpy(x0))
 
-# Generate lattices.
+# Define linear transforms.
 angles = np.linspace(0.0, np.radians(args.meas_angle), args.meas, endpoint=False)
 transfer_matrices = []
 for angle in angles:
-    matrix = mf.utils.rotation_matrix(angle)
-    matrix = cvt(torch.from_numpy(matrix))
+    matrix = mf.transform.rotation_matrix(angle)
+    matrix = send(matrix)
     transfer_matrices.append(matrix)
-lattices = []
+transforms = []
 for matrix in transfer_matrices:
-    lattice = mf.lattice.LinearLattice()
-    lattice = lattice.to(device)
-    lattice.set_matrix(matrix)
-    lattices.append(lattice)
+    transform = mf.transform.Linear(matrix)
+    transform = transform.to(device)
+    transforms.append(transform)
 
 # Create histogram diagnostic (x axis).
 xmax = args.xmax
 bin_edges = torch.linspace(-xmax, xmax, args.meas_bins + 1)
-bin_edges = cvt(bin_edges)
+bin_edges = send(bin_edges)
 bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
 diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
 diagnostics = [diagnostic]
 
-# Perform measurements.
-measurements = []
-for lattice in lattices:
-    measurements.append([])
-    for diagnostic in diagnostics:
-        measurement = diagnostic(lattice(x0), kde=False)
-        if args.meas_noise:
-            measurement = measurement + args.meas_noise * torch.randn(measurement.shape[0])
-        measurements[-1].append(measurement)
+# Generate measurement data.
+diagnostic.kde = False
+measurements = mf.simulate(x0, transforms, diagnostics)
+if args.meas_noise:
+    for i, measurement in enumerate(measurements):
+        measurements[i] = measurement + args.meas_noise * torch.randn(measurement.shape[0])
+diagnostic.kde = True
 
 
 # Model
 # --------------------------------------------------------------------------------------
-
-target = None
-if not args.absent:
-    target = zuko.distributions.DiagNormal(
-        cvt(torch.zeros(d)),
-        cvt(args.targ_scale * torch.ones(d)),
-    )
 
 flow = zuko.flows.NSF(
     features=d,
@@ -213,12 +201,23 @@ flow = zuko.flows.NSF(
 )
 flow = zuko.flows.Flow(flow.transform.inv, flow.base)  # faster sampling
 flow = flow.to(device)
+flow = WrappedZukoFlow(flow)
+
+prior = None
+if not args.absent:
+    prior = zuko.distributions.DiagNormal(
+        send(torch.zeros(d)),
+        send(args.targ_scale * torch.ones(d)),
+    )
+
+entropy_estimator = mf.entropy.MonteCarloEntropyEstimator()
 
 model = mf.MENTFlow(
     d=d,
-    flow=flow,
-    target=target,
-    lattices=lattices,
+    generator=flow,
+    prior=prior,
+    entropy_estimator=entropy_estimator,
+    transforms=transforms,
     diagnostics=diagnostics,
     measurements=measurements,
     penalty_parameter=args.penalty,
@@ -226,7 +225,7 @@ model = mf.MENTFlow(
 )
 
 cfg = {
-    "flow": {
+    "generator": {
         "features": d,
         "transforms": args.transforms,
         "spline_bins": args.spline_bins,
@@ -273,37 +272,47 @@ def plotter(model):
     res = args.vis_res
     grid_coords = [np.linspace(-xmax, xmax, res) for i in range(2)]
     grid_points = mf.utils.get_grid_points(grid_coords)
-    grid_points = cvt(torch.from_numpy(grid_points))
+    grid_points = torch.from_numpy(grid_points)
+    grid_points = send(grid_points)
     log_prob = model.log_prob(grid_points)
     log_prob = log_prob.reshape((res, res))
     prob = torch.exp(log_prob)
 
     # Draw samples from the model.
-    x = cvt(model.sample(args.vis_size))
+    x = send(model.sample(args.vis_size))
 
     # Simulate the measurements.
-    predictions = model.simulate(x, kde=False)
+    for diagnostics in model.diagnostics:
+        diagnostic.kde = False
+        
+    predictions = model.simulate(x)
     predictions = [grab(prediction) for prediction in unravel(predictions)]
     
+    for diagnostics in model.diagnostics:
+        diagnostic.kde = True
+
     return make_plots(grab(x), grab(prob), predictions)
 
 
 # FBP/SART benchmarks
 # --------------------------------------------------------------------------------------
 
-for method in ["sart", "fbp"]:
+diagnostic.kde = False
+
+for method in ["sart", "fbp"]:    
     _measurements = [grab(measurement) for measurement in unravel(measurements)]
     prob = utils.reconstruct_tomo(_measurements, angles, method=method, iterations=10)
     coords = 2 * [grab(diagnostic.bin_centers)]
     prob, coords = mf.utils.set_image_shape(prob, coords, (args.vis_res, args.vis_res))
-
+        
     x = mf.utils.sample_hist(prob, coords=coords, n=args.vis_size)
-    x = cvt(torch.from_numpy(x))
+    x = torch.from_numpy(x)
+    x = send(x)
+    
+    predictions = model.simulate(x)
+    predictions = [grab(prediction) for prediction in unravel(predictions)]
 
-    predictions = model.simulate(x, kde=False)
-    _predictions = [grab(prediction) for prediction in unravel(predictions)]
-
-    figs = make_plots(grab(x), prob, _predictions)
+    figs = make_plots(grab(x), prob, predictions)
 
     filename = f"fig__test_{method}_00.{args.fig_ext}"
     filename = os.path.join(man.outdir, f"figures/{filename}")
@@ -313,6 +322,8 @@ for method in ["sart", "fbp"]:
     filename = os.path.join(man.outdir, f"figures/{filename}")
     figs[1].savefig(filename, dpi=args.fig_dpi)
     plt.close("all")
+
+diagnostic.kde = True
 
 
 # Training

@@ -3,7 +3,9 @@ import mentflow.analysis
 import mentflow.data
 import mentflow.diagnostics
 import mentflow.entropy
-import mentflow.lattice
+import mentflow.loss
 import mentflow.models
 import mentflow.train
+import mentflow.transform
+import mentflow.types_
 import mentflow.utils

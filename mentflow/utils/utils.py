@@ -40,14 +40,8 @@ def get_num_parameters(model):
     return num_parameters
 
 
-def tensor_to_numpy(x):
+def grab(x):
     return x.detach().cpu().numpy()
-
-
-def rotation_matrix(angle):
-    _cos = np.cos(angle)
-    _sin = np.sin(angle)
-    return np.array([[_cos, _sin], [-_sin, _cos]])
 
 
 def centers_from_edges(edges):
