@@ -1,10 +1,9 @@
-"""Neural network generator.
+"""Non-invertible neural network generator.
 
 References
 ----------
 [1] https://doi.org/10.1103/PhysRevLett.130.145001
 """
-import typing
 from typing import Tuple
 
 import torch    
@@ -40,16 +39,17 @@ class NNTransformer(nn.Module):
             layers.append(nn.Dropout(dropout))
             layers.append(activation)
         layers.append(nn.Linear(hidden_units, output_features))
-        self.stack = nn.Sequential(*layers)
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.stack(x)
+        return self.layers(x)
 
 
 class NNGenerator(TrainableDistribution):
-    def __init__(self, d=2, **transformer_kws) -> None:
+    def __init__(self, base=None, transformer=None) -> None:
         super().__init__()
-        self.base = torch.distributions.Normal(loc=torch.zeros(d), scale=torch.ones(d))
+        self.transformer = transformer
+        self.base = base
 
     def sample(self, n: int) -> torch.Tensor:
         x = self.base.rsample((n,))
@@ -62,7 +62,11 @@ class NNGenerator(TrainableDistribution):
     def sample_and_log_prob(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         x = self.sample(n)
         log_prob = None
-        return (x, None)
+        return (x, log_prob)
+
+    def to(self, device):
+        self.transformer = self.transformer.to(device)
+        return self
 
         
         
