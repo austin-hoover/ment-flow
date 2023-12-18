@@ -5,4 +5,5 @@ proplot
 scipy
 scikit-image
 torch
+tqdm
 zuko
