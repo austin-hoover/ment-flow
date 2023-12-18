@@ -21,3 +21,6 @@ class WrappedZukoFlow(TrainableDistribution):
     def sample_and_log_prob(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         (x, log_prob) = self._flow().rsample_and_log_prob((n,))
         return (x, log_prob)
+
+    def forward(self):
+        return self._flow()
