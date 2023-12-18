@@ -36,7 +36,7 @@ class Histogram1D(Diagnostic):
         bin_edges : tensor
             Histogram bin edges.
         bandwidth : float
-            Gaussian kernel width (default is bin width).
+            Gaussian kernel width relative to bin width (default: 1.0)
         **kws
             Key word arguments passed to `Diagnostic`.
         """
@@ -45,7 +45,9 @@ class Histogram1D(Diagnostic):
         self.register_buffer("bin_edges", bin_edges)
         self.register_buffer("bin_centers", centers_from_edges(self.bin_edges))
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
-        self.register_buffer("bandwidth", self.resolution if bandwidth is None else bandwidth)
+        if bandwidth is None:
+            bandwidth = 1.0
+        self.register_buffer("bandwidth", bandwidth * self.resolution)
         self.kde = True
 
     def forward(self, x):
@@ -88,8 +90,8 @@ class Histogram2D(Diagnostic):
             Histogram is computed along this axis.
         bin_edges : list[tensor, tensor]
             Histogram bin edges.
-        bandwidth : float
-            Gaussian kernel width (default is bin width).
+        bandwidth : list[float]
+            Gaussian kernel width relative to bin widths (default: 1.0).
         **kws
             Key word arguments passed to `Diagnostic`.
         """
@@ -110,9 +112,11 @@ class Histogram2D(Diagnostic):
         self.register_buffer("resolution", resolution)
 
         if bandwidth is None:
-            bandwidth = d * [None]
+            bandwidth = d * [1.0]
+        if type(bandwidth) in [float, int]:
+            bandwidth = d * [bandwidth]
         for i in range(d):
-            bandwidth[i] = bandwidth[i] if bandwidth[i] else self.resolution[i]
+            bandwidth[i] = bandwidth[i] * self.resolution[i]
         self.register_buffer("bandwidth", torch.tensor(bandwidth))
         self.kde = True
 
