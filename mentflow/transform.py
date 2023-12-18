@@ -11,7 +11,7 @@ import torch.nn as nn
 class CompositeTransform(nn.Module):
     def __init__(self, transforms) -> None:
         super().__init__()
-        self.transforms = nn.ModuleList(transforms)
+        self.transforms = nn.Sequential(transforms)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for transform in self.transforms:

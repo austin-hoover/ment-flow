@@ -30,8 +30,8 @@ def is_power_of_two(n):
 
 
 def unravel(iterable):
-    return list(itertools.chain.from_iterable(iterable))
-
+    return itertools.chain.from_iterable(iterable)
+    
 
 def get_num_parameters(model):
     num_parameters = 0
