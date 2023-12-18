@@ -251,7 +251,7 @@ class Trainer:
         batch_size: int = 30000,
         rtol: float = 0.05,
         atol: float = 0.0,
-        cmax: float = 0.0,
+        dmax: float = 0.0,
         penalty_step: float = 10.0,
         penalty_scale: float = 1.0,
         penalty_max: float = None,
@@ -270,7 +270,7 @@ class Trainer:
         size and scaling factor after each epoch. These numbers should be as small as possible 
         to avoid ill-conditioning. A reasonable choice is to converge in 10-20 epochs.
         
-        The `cmax` parameter defines the convergence condition --- the maximum allowed L1 norm
+        The `dmax` parameter defines the convergence condition --- the maximum allowed L1 norm
         of the discrepancy vector C, divided by the length of C. Training will cease as soon 
         as |D| <= dmax * len(D). The ideal stopping point is usually clear from a plot of |C| 
         vs. iteration number. Eventually, large increases in H will be required for very 
@@ -291,8 +291,8 @@ class Trainer:
             Stop if |D| > (1 - rtol) * |D_old|. Default = 0.05.
         atol : float
             Stop if |D_old| - |D| < atol. Default = 0 (no progress).
-        cmax : float
-            Stop if |C| <= cmax. The default is zero (no noise). Note that even in 
+        dmax : float
+            Stop if |C| <= dmax. The default is zero (no noise). Note that even in 
             simulated reconstructions without measurement noise, noise can be introduced
             by the particle binning process.
         penalty_scale : float
@@ -397,8 +397,8 @@ class Trainer:
             if D_norm_old - D_norm < atol:
                 print("CONVERGED (atol)")
                 return
-            if D_norm <= cmax:
-                print("CONVERGED (cmax)")
+            if D_norm <= dmax:
+                print("CONVERGED (dmax)")
                 return 
 
             self.model.penalty_parameter *= penalty_scale

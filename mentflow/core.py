@@ -21,7 +21,6 @@ class MENTFlow(Model, nn.Module):
     """Flow-based maximum entropy tomography (MENT) solver."""
     def __init__(
         self,
-        d: int,
         generator: TrainableDistribution,
         entropy_estimator: EntropyEstimator,
         prior: Type[nn.Module],
@@ -35,8 +34,6 @@ class MENTFlow(Model, nn.Module):
 
         Parameters
         ----------
-        d : int
-            Dimensionality of the space.
         generator : TrainableDistribution
             A trainable model that generates samples and evalutes the probability density.
         entropy_estimator : EntropyEstimator
@@ -55,17 +52,15 @@ class MENTFlow(Model, nn.Module):
             - "mae": mean absolute error
             - "mse": mean squared error
         penalty_parameter : float
-            Loss = entropy + penalty_parameter * discrepancy.
+            Loss = H + penalty_parameter * |D|.
         """
         super().__init__()
-        self.d = d
         self.generator = generator
-        self.prior = prior
         self.entropy_estimator = entropy_estimator
-        self.entropy_estimator.prior = prior
-        self.transforms = transforms
+        self.set_prior(prior)
         self.set_diagnostics(diagnostics)
         self.set_measurements(measurements)
+        self.transforms = transforms
         self.discrepancy_function = get_loss_function(discrepancy_function)
         self.penalty_parameter = penalty_parameter
 
@@ -80,6 +75,11 @@ class MENTFlow(Model, nn.Module):
         if self.measurements is None:
             self.measurements = []
         self.n_meas = len(self.measurements)
+
+    def set_prior(self, prior):
+        self.prior = prior
+        if self.entropy_estimator is not None:
+            self.entropy_estimator.prior = prior
 
     def discrepancy(self, predictions) -> List[torch.Tensor]:
         """Compute simulation-measurement discrepancy vector.
@@ -154,7 +154,7 @@ class MENTFlow(Model, nn.Module):
             The discrepancy vector.
         """
         x, H = self.sample_and_entropy(batch_size)
-        predictions = self.simulate(x)
+        predictions = self.simulate(x)        
         D = self.discrepancy(predictions)
         L = H + self.penalty_parameter * (sum(D) / len(D))
         return (L, H, D)
@@ -164,7 +164,6 @@ class MENTFlow(Model, nn.Module):
     
     def save(self, path) -> None:
         state = {
-            "d": self.d,
             "generator": self.generator.state_dict(),
             "entropy_estimator": self.entropy_estimator,
             "prior": self.prior,
@@ -174,13 +173,15 @@ class MENTFlow(Model, nn.Module):
         }
         torch.save(state, path)
 
-    def load(self, path, map_location) -> None:
-        state = torch.load(path, map_location=map_location)
+    def load(self, path, device) -> None:
+        state = torch.load(path, map_location=device)
         try:
-            self.generator.load_state_dict(state["flow"])
+            self.generator.load_state_dict(state["generator"])
         except RuntimeError:
-            raise RuntimeError("Error loading flow. Architecture mismatch?")
-        self.prior = state["prior"]
+            raise RuntimeError("Error loading generative model. Architecture mismatch?")
+
+        self.entropy_estimator = state["entropy_estimator"]
+        self.set_prior(state["prior"])
         self.transforms = state["transforms"]
         self.diagnostics = state["diagnostics"]
         self.measurements = state["measurements"]

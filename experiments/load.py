@@ -2,12 +2,22 @@
 import os
 import pickle
 import sys
+import typing
+from typing import Callable
 
 import torch
 import torch.nn as nn
 import zuko
 
 import mentflow as mf
+import mentflow.wrappers
+
+
+def load_pickle(path):
+    """Load pickled file; return None if file does not exist."""
+    if os.path.exists(path):
+        return mf.utils.load_pickle(path)
+    return None
 
 
 def get_epoch_and_iteration_number(checkpoint_filename):
@@ -17,71 +27,86 @@ def get_epoch_and_iteration_number(checkpoint_filename):
     return epoch, iteration
 
 
-def make_flow(
-    features=2,
-    transforms=5,
-    spline_bins=20,
-    hidden_units=64,
-    hidden_layers=3,
-    randperm=True,
-    base=None,
-):
-    """Return normalizing flow model."""
+def make_generator_zuko(cfg):
+    """Construct WrappedZukoFlow from config dict."""
+
+    # Accept "features" or "output_features".
+    features = None
+    if "features" in cfg["generator"]:
+        features = cfg["generator"]["features"]
+    elif "output_features" in cfg["generator"]:
+        features = cfg["generator"]["output_features"]
+    else:
+        raise ValueError("Need key 'features' or 'output_features'")
+
+    # Create Neural Spline Flow (NSF) model.
     flow = zuko.flows.NSF(
         features=features,
-        transforms=transforms,
-        bins=spline_bins,
-        hidden_features=(hidden_layers * [hidden_units]),
-        randperm=randperm,
+        transforms=cfg["generator"]["transforms"],
+        bins=cfg["generator"]["spline_bins"],
+        hidden_features=(cfg["generator"]["hidden_layers"] * [cfg["generator"]["hidden_units"]]),
+        randperm=cfg["generator"]["randperm"],
     )
-    if base:
-        flow.base = base
     flow = zuko.flows.Flow(flow.transform.inv, flow.base)
+    flow = mentflow.wrappers.WrappedZukoFlow(flow)
     return flow
 
 
-def setup_model(cfg):
-    """Setup MENT-Flow model architecture."""
-    d = cfg["flow"]["features"]
-    flow = make_flow(
-        features=d,
-        transforms=cfg["flow"]["transforms"],
-        spline_bins=cfg["flow"]["spline_bins"],
-        hidden_units=cfg["flow"]["hidden_units"],
-        hidden_layers=cfg["flow"]["hidden_layers"],
-        randperm=cfg["flow"]["randperm"],
+def make_generator_nn(cfg):
+    """Construct NNGenerator from config dict."""
+    transformer = mf.models.NNTransformer(
+        input_features=cfg["generator"]["input_features"],
+        output_features=cfg["generator"]["output_features"],
+        hidden_layers=cfg["generator"]["hidden_layers"],
+        hidden_units=cfg["generator"]["hidden_units"],
+        dropout=cfg["generator"]["dropout"],
+        activation=cfg["generator"]["activation"],
     )
+    base = torch.distributions.Normal(
+        torch.zeros(cfg["generator"]["input_features"]),
+        torch.ones(cfg["generator"]["input_features"])
+    )
+    return mf.models.NNGenerator(base, transformer)
+
+
+def make_generator(cfg, generator_type="zuko"):
+    """Constructe generative model from config dict."""
+    _make_generator_options = {
+        "zuko": make_generator_zuko,
+        "nn": make_generator_nn,
+    }
+    _make_generator = _make_generator_options[generator_type]
+    return _make_generator(cfg)
+    
+
+def setup_model(cfg: dict, generator_type="zuko"):
+    """Set up MENT-Flow model architecture from config."""
     model = mf.MENTFlow(
-        d=d, 
-        flow=flow,
-        target=None, 
-        lattices=None,
+        generator=make_generator(cfg, generator_type),
+        prior=None, 
+        entropy_estimator=None,
+        transforms=None,
+        diagnostics=None,
         measurements=None, 
-        diagnostics=None
     )
     return model
 
 
-def load_model(cfg, path):
-    """Load MENT-Flow model architecture and parameters."""
-    model = setup_model(cfg)
-    model.load(path)
+def load_model(cfg: dict, checkpoint_path: str, generator_type="zuko"):
+    """Load MENT-Flow model architecture (from config) and parameters (from checkpoint)."""
+    model = setup_model(cfg, generator_type)
+    model.load(checkpoint_path)
     return model
 
 
-def load_run(folder):
-    """Load all data from run."""    
-    def _load_pickle(path):
-        if os.path.exists(path):
-            return mf.utils.load_pickle(path)
-        return None
+def load_run(folder, generator_type="zuko"):  
+    """Load all data from run."""
+    args    = load_pickle(os.path.join(folder, "args.pkl"))
+    cfg     = load_pickle(os.path.join(folder, "cfg.pkl"))
+    dist    = load_pickle(os.path.join(folder, "dist.pkl"))
+    history = load_pickle(os.path.join(folder, "history.pkl"))
 
-    args =  _load_pickle(os.path.join(folder, "args.pkl"))
-    cfg =  _load_pickle(os.path.join(folder, "cfg.pkl"))
-    history =  _load_pickle(os.path.join(folder, "history.pkl"))
-    dist =  _load_pickle(os.path.join(folder, "dist.pkl"))
-
-    model = setup_model(cfg)
+    model = setup_model(cfg, generator_type)
     model.eval()
     
     checkpoints = []
@@ -96,78 +121,11 @@ def load_run(folder):
         }
         checkpoints.append(checkpoint)
 
-    output = {
+    return {
         "model": model,
         "checkpoints": checkpoints,
-        "cfg": cfg,
         "args": args,
+        "cfg": cfg,
         "dist": dist,
         "history": history,
     }
-    return output
-
-
-
-## MENT-NN setup
-
-def setup_model_nn(cfg):
-    """Setup MENT-NN model architecture."""
-    flow = mf.models.NNGenerator(
-        input_features=cfg["flow"]["input_features"],
-        output_features=cfg["flow"]["output_features"],
-        hidden_layers=cfg["flow"]["hidden_layers"],
-        hidden_units=cfg["flow"]["hidden_units"],
-        dropout=cfg["flow"]["dropout"],
-        activation=cfg["flow"]["activation"],
-    )
-    model = mf.MENTNN(
-        d=cfg["flow"]["output_features"],
-        flow=flow,
-        base=cfg["base"],
-        entropy_estimator=cfg["entropy_estimator"],
-        target=None, 
-        lattices=None,
-        measurements=None, 
-        diagnostics=None
-    )
-    return model
-
-
-def load_model_nn(cfg, path):
-    """Load MENT-NN model architecture and parameters."""
-    model = setup_model_nn(cfg)
-    model.load(path)
-    return model
-
-
-def load_run_nn(folder):
-    """Load all data from run (MENT-NN)."""
-    args =  _load_pickle(os.path.join(folder, "args.pkl"))
-    cfg =  _load_pickle(os.path.join(folder, "cfg.pkl"))
-    history =  _load_pickle(os.path.join(folder, "history.pkl"))
-    dist =  _load_pickle(os.path.join(folder, "dist.pkl"))
-
-    model = setup_model_nn(cfg)
-    model.eval()
-    
-    checkpoints = []
-    subdir = os.path.join(folder, "checkpoints")
-    checkpoint_paths = [os.path.join(subdir, f) for f in sorted(os.listdir(subdir))]
-    for checkpoint_path in checkpoint_paths:
-        (step, iteration) = get_epoch_and_iteration_number(checkpoint_path)
-        checkpoint = {
-            "step": step,
-            "iteration": iteration,
-            "path": checkpoint_path,
-        }
-        checkpoints.append(checkpoint)
-
-    output = {
-        "model": model,
-        "checkpoints": checkpoints,
-        "cfg": cfg,
-        "args": args,
-        "dist": dist,
-        "history": history,
-    }
-    return output

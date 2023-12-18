@@ -87,7 +87,7 @@ parser.add_argument("--penalty-scale", type=float, default=1.1)
 parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
 parser.add_argument("--atol", type=float, default=0.0)
-parser.add_argument("--cmax", type=float, default=0.0)
+parser.add_argument("--dmax", type=float, default=0.0)
 parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
 
 # Optimizer (ADAM)
@@ -157,7 +157,7 @@ mf.utils.save_pickle(dist, man.get_path("dist.pkl"))
 x0 = dist.sample(args.data_size)
 x0 = send(torch.from_numpy(x0))
 
-# Define linear transforms.
+# Define linear transformations.
 angles = np.linspace(0.0, np.radians(args.meas_angle), args.meas, endpoint=False)
 transfer_matrices = []
 for angle in angles:
@@ -180,7 +180,7 @@ diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
 diagnostics = [diagnostic]
 
-# Generate measurement data.
+# Generate measurement data. (Use histogram rather than KDE.)
 diagnostic.kde = False
 measurements = mf.simulate(x0, transforms, diagnostics)
 if args.meas_noise:
@@ -213,7 +213,6 @@ if not args.absent:
 entropy_estimator = mf.entropy.MonteCarloEntropyEstimator()
 
 model = mf.MENTFlow(
-    d=d,
     generator=flow,
     prior=prior,
     entropy_estimator=entropy_estimator,
@@ -223,10 +222,12 @@ model = mf.MENTFlow(
     penalty_parameter=args.penalty,
     discrepancy_function=args.disc,
 )
+model = model.to(device)
 
 cfg = {
     "generator": {
-        "features": d,
+        "input_features": d,
+        "output_features": d,
         "transforms": args.transforms,
         "spline_bins": args.spline_bins,
         "hidden_units": args.hidden_units,
@@ -237,9 +238,8 @@ cfg = {
 mf.utils.save_pickle(cfg, man.get_path("cfg.pkl"))
 
 
-# Diagnostics
+# Training diagnostics
 # --------------------------------------------------------------------------------------
-
 
 def make_plots(x, prob, predictions):
     figs = []
@@ -326,7 +326,7 @@ for method in ["sart", "fbp"]:
 diagnostic.kde = True
 
 
-# Training
+# Training loop
 # --------------------------------------------------------------------------------------
 
 optimizer = torch.optim.AdamW(
@@ -361,7 +361,7 @@ trainer.train(
     batch_size=args.batch_size,
     rtol=args.rtol,
     atol=args.atol,
-    cmax=args.cmax,
+    dmax=args.dmax,
     penalty_step=args.penalty_step,
     penalty_scale=args.penalty_scale,
     penalty_max=args.penalty_max,
@@ -371,4 +371,4 @@ trainer.train(
     savefig_kws=dict(ext=args.fig_ext, dpi=args.fig_dpi),
 )
 
-print(man.timestamp)
+print(f"timestamp={man.timestamp}")
