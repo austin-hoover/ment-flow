@@ -36,11 +36,11 @@ def interpolate_1d(
     int_points = grab(int_points)
     int_values = np.zeros(int_points.shape[0])
     if method == "nearest":
-        interpolator = scipy.interpolate.NearestNDInterpolator(points, values)
-        int_values = interpolator(int_points)
+        fint = scipy.interpolate.interp1d(points, values, kind='nearest', bounds_error=False, fill_value=0.0)
+        int_values = fint(int_points)
     elif method == "linear":
-        interpolator = scipy.interpolate.LinearNDInterpolator(points, values, fill_value=0.0)
-        int_values = interpolator(int_points)
+        fint = scipy.interpolate.interp1d(points, values, kind='linear', bounds_error=False, fill_value=0.0)
+        int_values = fint(int_points)
     elif method == "pchip":
         interpolator = scipy.interpolate.PchipInterpolator(points, values, extrapolate=None)
         int_values = interpolator(int_points)
