@@ -78,8 +78,7 @@ class MENT_2D1D:
         ----------
         transforms : list[callable]
             `transforms[i](x)` maps the input coordinates x to the ith measurement.
-            Nonlinear maps are possible but we must track the Jacobian determinant;
-            see comment in code below.
+            See comment in code below about jacobian determinant.
         diagnostic : callable
             `diagnostic(x)` generates the measurement data.
         measurements : list[ndarray]
