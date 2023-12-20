@@ -16,7 +16,7 @@ class CompositeTransform(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for transform in self.transforms:
             x = transform(x)
-        return x
+        return x        
 
     def inverse(self, x: torch.Tensor) -> torch.Tensor:
         for transform in self.transforms:

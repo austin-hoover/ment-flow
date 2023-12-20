@@ -1,16 +1,13 @@
 import numpy as np
 import skimage.transform
+import torch
+
+from .utils import grab
 
 
 def centers_from_edges(edges):
     """Compute bin centers from evenly spaced bin edges."""
     return 0.5 * (edges[:-1] + edges[1:])
-
-
-def edges_from_centers(centers):
-    """Compute bin edges from evenly spaced bin centers."""
-    delta = np.diff(centers)[0]
-    return np.hstack([centers - 0.5 * delta, [centers[-1] + 0.5 * delta]])
 
 
 def sample_hist(hist, bin_edges=None, n=1):
@@ -47,6 +44,14 @@ def sample_hist(hist, bin_edges=None, n=1):
     return np.squeeze(np.random.uniform(lb, ub).T)
 
 
+def sample_hist_torch(hist, bin_edges=None, n=1):
+    _hist = grab(hist)
+    _bin_edges = [grab(e) for e in bin_edges]
+    x = sample_hist(_hist, _bin_edges, n)
+    x = torch.from_numpy(x)
+    return x
+
+
 def get_grid_points(coords):
     """Return list of grid coordinates from coordinate arrays along each axis.
 
@@ -61,7 +66,11 @@ def get_grid_points(coords):
         Coordinate array for all points in the grid. The total number of grid
         points is `K = np.prod([len(c) for c in coords])`.
     """
-    return np.stack([C.ravel() for C in np.meshgrid(*coords, indexing="ij")], axis=-1)
+    return np.vstack([C.ravel() for C in np.meshgrid(*coords, indexing="ij")]).T
+
+
+def get_grid_points_torch(coords):
+    return torch.vstack([C.ravel() for C in torch.meshgrid(*coords, indexing="ij")]).T
 
 
 def set_image_shape(image, coords, shape):

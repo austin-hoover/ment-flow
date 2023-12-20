@@ -25,6 +25,7 @@ class Histogram1D(Diagnostic):
         axis: int,
         bin_edges: torch.Tensor,
         bandwidth: Optional[float] = None,
+        kde=True,
         **kws
     ) -> None:
         """Constructor.
@@ -48,7 +49,7 @@ class Histogram1D(Diagnostic):
         if bandwidth is None:
             bandwidth = 1.0
         self.register_buffer("bandwidth", bandwidth * self.resolution)
-        self.kde = True
+        self.kde = kde
 
     def forward(self, x):
         """Estimate probability density. 
@@ -80,6 +81,7 @@ class Histogram2D(Diagnostic):
         axis: Iterable[int],
         bin_edges: Iterable[torch.Tensor],
         bandwidth: Optional[Iterable[float]] = None,
+        kde=True,
         **kws
     ) -> None:
         """Constructor.
@@ -118,7 +120,7 @@ class Histogram2D(Diagnostic):
         for i in range(d):
             bandwidth[i] = bandwidth[i] * self.resolution[i]
         self.register_buffer("bandwidth", torch.tensor(bandwidth))
-        self.kde = True
+        self.kde = kde
 
     def forward(self, x):
         """Estimate probability density. 

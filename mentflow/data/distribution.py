@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 class Distribution:
@@ -19,41 +20,41 @@ class Distribution:
         raise NotImplementedError 
 
     def sample(self, n):
-        X = self._sample(n)
+        x = self._sample(n)
         if self.shuffle:
-            X = shuffle(X, rng=self.rng)
+            x = shuffle(x, rng=self.rng)
         if self.normalize:
-            X = normalize(X)
+            x = normalize(x)
         if self.noise:
-            X = corrupt(X, self.noise, rng=self.rng)
+            x = corrupt(x, self.noise, rng=self.rng)
         if self.decorr:
-            X = decorrelate(X, rng=self.rng)
-        return X
+            x = decorrelate(x, rng=self.rng)
+        return torch.from_numpy(x)
 
 
-def corrupt(X, scale, rng=None):
-    return X + rng.normal(scale=scale, size=X.shape)
+def corrupt(x, scale, rng=None):
+    return x + rng.normal(scale=scale, size=x.shape)
 
 
-def decorrelate(X, rng=None):
-    if X.shape[1] % 2 == 0:
+def decorrelate(x, rng=None):
+    if x.shape[1] % 2 == 0:
         for i in range(0, d, 2):
             j = 2 * i
             idx = rng.permutation(np.arange(n))
-            X[:, j : j + 1] = X[idx, j : j + 1]
+            x[:, j : j + 1] = x[idx, j : j + 1]
     else:
         for i in range(0, d, 1):
             idx = rng.permutation(np.arange(n))
-            X[:, j] = X[idx, j]
+            x[:, j] = x[idx, j]
     return x
 
 
-def normalize(X):
-    X = X - np.mean(X, axis=0)
-    X = X / np.max(np.std(X, axis=0))
-    return X
+def normalize(x):
+    x = x - np.mean(x, axis=0)
+    x = x / np.max(np.std(x, axis=0))
+    return x
 
 
-def shuffle(X, rng=None):
-    return rng.permutation(X)
+def shuffle(x, rng=None):
+    return rng.permutation(x)
     
