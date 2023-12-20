@@ -46,7 +46,8 @@ class GridSampler:
     def __call__(self, log_prob_func: Callable, n: int) -> torch.Tensor:
         grid_points = self.get_grid_points()
         grid_points = self._send(grid_points)
-        values = torch.exp(log_prob_func(grid_points))
+        log_values = log_prob_func(grid_points)
+        values = torch.exp(log_values)
         values = values.reshape(self.shape)
         x = sample_hist_torch(values, self.coords, n)
         x = self._send(x)

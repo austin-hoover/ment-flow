@@ -42,11 +42,12 @@ def interpolate_1d(
         fint = scipy.interpolate.interp1d(points, values, kind='linear', bounds_error=False, fill_value=0.0)
         int_values = fint(int_points)
     elif method == "pchip":
-        interpolator = scipy.interpolate.PchipInterpolator(points, values, extrapolate=None)
+        interpolator = scipy.interpolate.PchipInterpolator(points, values, extrapolate=True)
         int_values = interpolator(int_points)
     else:
         raise ValueError("Invalid `interpolate` method.")
-    return torch.from_numpy(int_values)
+    int_values = torch.from_numpy(int_values)
+    return int_values
 
 
 def interpolate_2d(
@@ -133,6 +134,11 @@ class MENT_2D1D:
         sampler=None,
         device=None,
     ) -> None:
+        """Constructor."""
+        self.device = device
+        if self.device is None:
+            self.device = torch.device("cpu")
+
         self.d = 2
         self.iteration = 0
         self.interpolate = interpolate
@@ -151,10 +157,6 @@ class MENT_2D1D:
             xmax = 1.5 * max(self.bin_edges)
             limits = 2 * [(-xmax, +xmax)]
             self.sampler = GridSampler(limits=limits, res=200)
-
-        self.device = device
-        if self.device is None:
-            self.device = torch.device("cpu")
 
     def _send(self, x):
         return x.type(torch.float32).to(self.device)
@@ -184,16 +186,17 @@ class MENT_2D1D:
             for j in range(len(measurement)):
                 g_ij = float(measurement[j] > 0)
                 self.lagrange_functions[-1].append(g_ij)
+        self.lagrange_functions = [self._send(torch.tensor(h)) for h in self.lagrange_functions]
         return self.lagrange_functions
 
     def evaluate_lagrange_function(self, index: int, u: torch.Tensor) -> torch.Tensor:
         """Evaluate lagrange function h_i(u_i) at transformed point u."""
         points = self.bin_coords
         values = self.lagrange_functions[index]
-        values = torch.tensor(values)
         values = self._send(values)
         int_points = u[:, 0]
-        int_values = interpolate_1d(points, values, int_points, method=self.interpolate)    
+        int_values = interpolate_1d(points, values, int_points, method=self.interpolate)
+        int_values = torch.clamp(int_values, 0.0, None)
         int_values = self._send(int_values)
         return int_values
 
@@ -207,7 +210,7 @@ class MENT_2D1D:
         for i, transform in enumerate(self.transforms):
             u = transform(x)
             h_func = self.evaluate_lagrange_function(i, u)
-            log_prob += torch.log(h_func)
+            log_prob += torch.log(h_func + 1.00e-12)
         log_prob += self.prior.log_prob(x)
         return log_prob
 
@@ -233,7 +236,7 @@ class MENT_2D1D:
         normalization = projection.sum() * bin_volume
         return projection / normalization
 
-    def _simulate_integrate(self, index: int, xmax: float = None, res: int = 150) -> torch.Tensor:
+    def _simulate_integrate(self, index: int, xmax: float = None, res: int = 150, **kws) -> torch.Tensor:
         """Compute the ith projection using numerical integration.
 
         This function evaluates the density on a grid in the transformed space using
@@ -284,7 +287,7 @@ class MENT_2D1D:
         prediction = self._normalize_projection(prediction)
         return prediction
 
-    def _simulate_sample(self, index: int, n: int = 100000) -> torch.Tensor:
+    def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
         """Compute the ith projection using particle tracking + density estimation.
 
         This function samples particles from the model distribution, tracks the
