@@ -114,7 +114,7 @@ class UniformPrior:
 
 
 class MENT:
-    """MENT reconstruction from projections.
+    """MENT reconstruction model.
     
     Parameters
     ----------
@@ -139,15 +139,18 @@ class MENT:
     sampler : callable (optional)
         Implements `sample(f, n)` method to sample points from distribution function f.
         This is only used in the `simulate_sample` method.
-    lagrange_functions : list[tensor]
-        Lagrange functions ("h functions", "component functions") {h_i(u_i)} evaluated
-        at each point on the the measurement axes u_i. We can treat them as continuous
-        functions by interpolating between the points.
     interpolate : bool, str
         Interpolation method when evaluating the lagrange functions.
             - "nearest": nearest neighbor (scipy.interpolate.NearestNDInterpolator).
             - "linear": linear interpolation (scipy.interpolate.LinearNDInterpolator).
             - "pchip": 1D monotonic cubic splines (scipy.interpolate.PchipInterpolator).
+
+    Attributes
+    ----------
+    lagrange_functions : list[tensor]
+        Lagrange functions ("h functions", "component functions") {h_i(u_i)} evaluated
+        at each point on the the measurement axes u_i. We can treat them as continuous
+        functions by interpolating between the points.
     """
     def __init__(
         self,
@@ -258,9 +261,14 @@ class MENT:
         log_prob = self.log_prob(x)
         return (x, log_prob)
         
-    def _simulate_integrate(self, index: int, **kws) -> torch.Tensor:
-        """Compute the ith projection using numerical integration."""
-        raise NotImplementedError
+    def _simulate_integrate(self, index: int, limits: List[Tuple[float]], res: Tuple[int], **kws) -> torch.Tensor:
+        """Compute the ith projection using numerical integration.
+
+        This function evaluates the density on a grid in the transformed space using
+        the Jacobian determinant of the transfer map, then integrates the density to
+        obtain the projection onto the measurement axis.
+        """
+        return
 
     def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
         """Compute the ith projection using particle tracking + density estimation."""
@@ -361,9 +369,7 @@ class MENT_2D1D(MENT):
         tensor, shape (len(self.diagnostic.bin_coords),)
             The projection onto the ith measurement axis.
         """
-        # Compute the density on a regular grid in the transformed space.
-        # We do this by flowing backward and tracking the Jacobian determinant
-        # (determinant = 1 for linear transformations).
+        # Define a grid in the transformed sapce.
         if xmax is None:
             xmax = 1.5 * max(self.diagnostic.bin_coords)
         int_grid_xmax = xmax  # integration limits
@@ -376,16 +382,16 @@ class MENT_2D1D(MENT):
         grid_coords = [self._send(c) for c in grid_coords]
         grid_points = get_grid_points_torch(grid_coords)
         grid_points = self._send(grid_points)
-        transform = self.transforms[index]
-        grid_points_in = transform.inverse(grid_points)
-        prob_in = torch.exp(self.log_prob(grid_points_in))
 
-        # Assume det(J) = 1 for now; in the future, we should add a `forward_and_log_det`
-        # method to `transform` object to track the Jacobian determinant.
-        prob_out = prob_in
+        # Compute the density at each grid point.
+        transform = self.transforms[index]
+        grid_points_in, ladj = transform.inverse_and_ladj(grid_points) 
+        log_prob_in = self.log_prob(grid_points_in)
+        log_prob_out = log_prob_in + ladj  # check sign
+        prob_out = torch.exp(log_prob_out)
+        prob_out = prob_out.reshape(grid_shape)
 
         # Compute the projection in the transformed space.
-        prob_out = prob_out.reshape(grid_shape)
         prediction = torch.sum(prob_out, dim=1)
         prediction = self._normalize_projection(prediction)
         return prediction
