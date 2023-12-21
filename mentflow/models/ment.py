@@ -1,4 +1,4 @@
-"""Iterative maximum-entropy tomography (MENT) solver.
+"""Iterative maximum-entropy tomography (MENT) solvers.
 
 References
 ----------
@@ -30,7 +30,7 @@ def interpolate_1d(
     int_points: torch.Tensor,
     method="linear"
 ) -> torch.Tensor:
-    """Interpolate one-dimensional tensor."""
+    """Interpolate one-dimensional data."""
     points = grab(points)
     values = grab(values)
     int_points = grab(int_points)
@@ -48,15 +48,32 @@ def interpolate_1d(
         raise ValueError("Invalid `interpolate` method.")
     int_values = torch.from_numpy(int_values)
     return int_values
+    
 
-
-def interpolate_2d(
+def interpolate_dd(
     points: torch.Tensor,
     values: torch.Tensor, 
     int_points: torch.Tensor,
-    method="linear"
+    method="linear",
 ) -> torch.Tensor:
-    raise NotImplementedError
+    """Interpolate d-dimensional data."""
+    if points.ndim == 1:    
+        return interpolate_1d(points, values, int_points, method=method)
+
+    points = grab(points)
+    values = grab(values)
+    int_points = grab(int_points)
+    int_values = np.zeros(int_points.shape[0])
+
+    int_values = scipy.interpolate.griddata(
+        points,
+        values,
+        int_points,
+        method=method,
+        fill_value=0.0,
+    )
+    int_values = torch.from_numpy(int_values)
+    return int_values
 
 
 class GaussianPrior:
@@ -95,69 +112,74 @@ class UniformPrior:
         return _log_prob
 
 
-class MENT_2D1D:
-    """2D MENT reconstruction from 1D projections.
-
+class MENT:
+    """MENT reconstruction from projections.
+    
     Parameters
     ----------
+    d : int
+        Dimension of the phase space.
+    d_proj : int
+        Dimension of the projected space. d_proj < d.
     transforms : list[callable]
-        `transforms[i](x)` maps the input coordinates x to the ith measurement.
-        See comment in code below about jacobian determinant.
+        `transforms[i](x)` maps the input d-dimensional coordinates x to the ith
+        measurement location.
     diagnostic : callable
-        `diagnostic(x)` generates the measurement data.
-    measurements : list[ndarray]
-        A list of measured one-dimensional projections. They should be normalized.
+        `diagnostic(x)` generates the measurement data. The entire forward process
+        is `y_i = diagnostic(transforms[i](x))`. Must have the following parameters:
+            - `bin_edges`: list[tensor], length d_proj; histogram bin edges
+            - `bin_coords`: list[tensor], length d_proj; histogram bin centers
+            - `axis`: int or tuple[int], length d_proj; the projection axis
+    measurements : list[tensor]
+        A list of measured m-dimensional projections. They should be normalized.
     prior : object
-        The prior distribution. Must implement `prob(x)`. Defaults to uniform
+        A d-dimensional prior distribution. Must implement `prob(x)`. Defaults to uniform
         distribution with wide support [-100, 100].
-    sampler : Sampler
+    sampler : callable (optional)
         Implements `sample(f, n)` method to sample points from distribution function f.
+        This is only used in the `simulate_sample` method.
     lagrange_functions : list[tensor]
         Lagrange functions ("h functions", "component functions") {h_i(u_i)} evaluated
-        at each point on the the measurement axis. We can treat them as continuous
-        functions by interpolating between the points, or we can assume their value
-        is constant in each bin; see below.
+        at each point on the the measurement axes u_i. We can treat them as continuous
+        functions by interpolating between the points.
     interpolate : bool, str
-        Interpolation method when evaluating the lagrange functions ("h functions",
-        "component functions").
+        Interpolation method when evaluating the lagrange functions.
             - "nearest": nearest neighbor (scipy.interpolate.NearestNDInterpolator).
             - "linear": linear interpolation (scipy.interpolate.LinearNDInterpolator).
-            - "pchip": monotonic cubic splines (scipy.interpolate.PchipInterpolator).
+            - "pchip": 1D monotonic cubic splines (scipy.interpolate.PchipInterpolator).
     """
     def __init__(
         self,
+        d: int,
+        d_proj: int,
         transforms: List[Callable],
         diagnostic: Callable,
         measurements: List[torch.Tensor],
         prior: Any = None,
-        interpolate: str = "pchip",
-        sampler=None,
-        device=None,
+        interpolate: str = "linear",
+        sampler: Optional[Callable] = None,
+        device: Optional[torch.device] = None,
     ) -> None:
         """Constructor."""
         self.device = device
         if self.device is None:
             self.device = torch.device("cpu")
 
-        self.d = 2
+        self.d = d
+        self.d_proj = d_proj
         self.iteration = 0
         self.interpolate = interpolate
         self.transforms = transforms
-        self.diagnostic = self.set_diagnostic(diagnostic)
+        self.diagnostic = diagnostic
         self.measurements = self.set_measurements(measurements)
 
         self.prior = prior
         if self.prior is None:
-            self.prior = UniformPrior(scale=100.0)
+            self.prior = UniformPrior(d=d, scale=100.0)
 
         self.lagrange_functions = self.initialize_lagrange_functions()
-
         self.sampler = sampler
-        if self.sampler is None:
-            xmax = 1.5 * max(self.bin_edges)
-            limits = 2 * [(-xmax, +xmax)]
-            self.sampler = GridSampler(limits=limits, res=200)
-
+        
     def _send(self, x):
         return x.type(torch.float32).to(self.device)
 
@@ -165,9 +187,7 @@ class MENT_2D1D:
         """Set the diagnostic (histogrammer)."""
         self.diagnostic = diagnostic
         if self.diagnostic is not None:
-            self.n_bins = len(self.diagnostic.bin_edges)
-            self.bin_edges = self.diagnostic.bin_edges
-            self.bin_coords = 0.5 * (self.bin_edges[:-1] + self.bin_edges[1:])
+            self.proj_axis = self.diagnostic.axis
         return self.diagnostic
 
     def set_measurements(self, measurements: List[torch.Tensor]):
@@ -175,36 +195,35 @@ class MENT_2D1D:
         self.measurements = measurements
         if self.measurements is None:
             self.measurements = []
-        self.n_meas = self.n_constraints = len(self.measurements)
+        self.n_meas = len(self.measurements)
         return self.measurements
 
-    def initialize_lagrange_functions(self):
-        """Initialize the model to the prior distribution."""
+    def initialize_lagrange_functions(self) -> None:
+        """Initialize the model to the prior distribution.
+
+        Also set multipliers to zero where the measurement is zero. This will force
+        zero density in regions outside the boundary defined by the backprojected
+        measurements. (See Ref. [1].)
+        """
         self.lagrange_functions = []
-        for i, measurement in enumerate(self.measurements):
-            self.lagrange_functions.append([])
-            for j in range(len(measurement)):
-                g_ij = float(measurement[j] > 0)
-                self.lagrange_functions[-1].append(g_ij)
-        self.lagrange_functions = [self._send(torch.tensor(h)) for h in self.lagrange_functions]
+        for measurement in self.measurements:
+            self.lagrange_functions.append((measurement > 0.0).float())
         return self.lagrange_functions
 
     def evaluate_lagrange_function(self, index: int, u: torch.Tensor) -> torch.Tensor:
         """Evaluate lagrange function h_i(u_i) at transformed point u."""
-        points = self.bin_coords
+        points = self.diagnostic.bin_coords
         values = self.lagrange_functions[index]
         values = self._send(values)
-        int_points = u[:, 0]
-        int_values = interpolate_1d(points, values, int_points, method=self.interpolate)
+        int_points = u[:, self.diagnostic.axis]
+        int_values = interpolate_dd(points, values, int_points, method=self.interpolate)
         int_values = torch.clamp(int_values, 0.0, None)
         int_values = self._send(int_values)
         return int_values
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
-        """Return the logarithm of the probability density at x.
-
-        See Dusaussoy Eq. (15).
-        """
+        """Return the logarithm of the probability density at x."""
+        # I think this should be general (product of h functions), but we'll need to check.
         log_prob = torch.ones(len(x))
         log_prob = self._send(log_prob)        
         for i, transform in enumerate(self.transforms):
@@ -231,8 +250,94 @@ class MENT_2D1D:
         return (x, log_prob)
 
     def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
+        """Normalize the projection."""
+        # Should be straightforward to write general method.
+        raise NotImplementedError
+
+    def _simulate_integrate(self, index: int, **kws) -> torch.Tensor:
+        """Compute the ith projection using numerical integration."""
+        raise NotImplementedError
+
+    def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
+        """Compute the ith projection using particle tracking + density estimation."""
+        raise NotImplementedError
+
+    def _simulate(self, index: int, method: str = "integrate", **kws) -> torch.Tensor:
+        """Compute the ith projection.
+
+        Parameters
+        ----------
+        index : int
+            The measurement index.
+        method : {"integrate", "sample"}
+            Method to compute the projections of the distribution.
+            - "integrate":
+                Compute the density on a regular grid in the transformed space; evaluate
+                the density on the grid using Jacobian determinant of transfer map.
+            - "sample":
+                Sample particles from the distribution, track the particles using the
+                specified transform function, and estimate the projected density 
+                using `self.diagnostic`.
+        **kws
+            Key word arguments passed to `self._simulate_integrate` (if method="integrate")
+            or `self._simulate_sample` (if method="sample").
+
+        Returns
+        -------
+        tensor, shape (len(self.diagnostic.bin_coords),)
+            The projection onto the ith measurement axis.
+        """
+        _functions = {
+            "integrate": self._simulate_integrate,
+            "sample": self._simulate_sample,
+        }
+        _function = _functions[method]
+        return _function(index=index, **kws)
+
+    def simulate(self, **kws) -> torch.Tensor:
+        """Compute all projections. Same arguments as `self._simulate`."""
+        return [self._simulate(index, **kws) for index in range(self.n_meas)]
+
+    def gauss_seidel_iterate(self, *args, **kws) -> None:
+        """Execute Gauss-Seidel iteration to update lagrange multipliers.
+
+        Parameters
+        ----------
+        *args
+            Arguments passed to `self._simulate`.
+        **kws
+            Key word arguments passed to `self._simulate`.
+        """
+        raise NotImplementedError
+
+    def parameters(self):
+        return
+
+    def save(path):
+        return
+
+    def load(path):
+        return
+
+
+# I'm guessing that higher dimensional versions of MENT will follow the same pattern, so 
+# we wont' need to write separate classes for each case.
+        
+
+class MENT_2D1D(MENT):
+    """2D MENT reconstruction from 1D projections."""
+    def __init__(self, **kws) -> None:
+        super().__init__(d=2, d_proj=1, **kws)
+
+        # Use grid sampler by default.
+        if self.sampler is None:
+            xmax = 1.5 * max(self.diagnostic.bin_edges)
+            limits = 2 * [(-xmax, +xmax)]
+            self.sampler = GridSampler(limits=limits, res=200)
+
+    def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
         """Normalize one-dimensional projection."""
-        bin_volume = self.bin_edges[1] - self.bin_edges[0]
+        bin_volume = self.diagnostic.bin_edges[1] - self.diagnostic.bin_edges[0]
         normalization = projection.sum() * bin_volume
         return projection / normalization
 
@@ -255,19 +360,19 @@ class MENT_2D1D:
 
         Returns
         -------
-        tensor, shape (len(self.bin_coords),)
+        tensor, shape (len(self.diagnostic.bin_coords),)
             The projection onto the ith measurement axis.
         """
         # Compute the density on a regular grid in the transformed space.
         # We do this by flowing backward and tracking the Jacobian determinant
         # (determinant = 1 for linear transformations).
         if xmax is None:
-            xmax = 1.5 * max(self.bin_coords)
+            xmax = 1.5 * max(self.diagnostic.bin_coords)
         int_grid_xmax = xmax  # integration limits
         int_res = res  # integration grid resolution
-        grid_shape = (len(self.bin_coords), int_res)
+        grid_shape = (len(self.diagnostic.bin_coords), int_res)
         grid_coords = [
-            self.bin_coords,  # measurement axis
+            self.diagnostic.bin_coords,  # measurement axis
             torch.linspace(-int_grid_xmax, +int_grid_xmax, int_res),  # integration axis
         ]
         grid_coords = [self._send(c) for c in grid_coords]
@@ -294,6 +399,8 @@ class MENT_2D1D:
         particles using the ith transform function, and estimates the projected
         density using a histogram.
 
+        Consequently, the forward process does not need to be invertible. 
+
         Parameters
         ----------
         index : int
@@ -303,7 +410,7 @@ class MENT_2D1D:
 
         Returns
         -------
-        tensor, shape (len(self.bin_coords),)
+        tensor, shape (len(self.diagnostic.bin_coords),)
             The projection onto the ith measurement axis.
         """
         transform = self.transforms[index]
@@ -313,42 +420,6 @@ class MENT_2D1D:
         prediction = self.diagnostic(u)
         prediction = self._normalize_projection(prediction)
         return prediction
-
-    def _simulate(self, index: int, method: str = "integrate", **kws) -> torch.Tensor:
-        """Compute the ith projection.
-
-        Parameters
-        ----------
-        index : int
-            The measurement index.
-        method : {"integrate", "sample"}
-            Method to compute the projections of the distribution. See `simulate` method.
-            - "integrate":
-                Compute the density on a regular grid in the transformed space; evaluate
-                the density on the grid using Jacobian determinant of transfer map.
-            - "sample":
-                Sample particles from the distribution, track the particles using the
-                specified transform function, and estimate the projected density using a
-                histogram.
-        **kws
-            Key word arguments passed to `self._simulate_integrate` (if method="integrate")
-            or `self._simulate_sample` (if method="sample").
-
-        Returns
-        -------
-        tensor, shape (len(self.bin_coords),)
-            The projection onto the ith measurement axis.
-        """
-        _functions = {
-            "integrate": self._simulate_integrate,
-            "sample": self._simulate_sample,
-        }
-        _function = _functions[method]
-        return _function(index=index, **kws)
-
-    def simulate(self, **kws) -> torch.Tensor:
-        """Compute all projections. Same arguments as `self._simulate`."""
-        return [self._simulate(index, **kws) for index in range(self.n_meas)]
 
     def gauss_seidel_iterate(self, *args, **kws) -> None:
         """Execute Gauss-Seidel iteration to update lagrange multipliers.
@@ -369,14 +440,4 @@ class MENT_2D1D:
                     self.lagrange_functions[i][j] *= (g_meas / g_pred)
         self.iteration += 1
 
-    def parameters(self):
-        return
 
-    def save(path):
-        return
-
-    def load(path):
-        return
-
-
-    
