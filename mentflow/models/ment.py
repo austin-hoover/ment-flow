@@ -6,6 +6,7 @@ References
 [2] https://doi.org/10.1103/PhysRevAccelBeams.25.042801
 """
 import abc
+import math
 import typing
 from typing import Any
 from typing import Callable
@@ -198,6 +199,14 @@ class MENT:
         self.n_meas = len(self.measurements)
         return self.measurements
 
+    def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
+        """Normalize the projection."""
+        if self.d_proj == 1:
+            bin_volume = self.diagnostic.bin_edges[1] - self.diagnostic.bin_edges[0]
+        else:
+            bin_volume = math.prod((e[1] - e[0]) for e in self.diagnsotic.bin_edges)        
+        return projection / projection.sum() / bin_volume
+
     def initialize_lagrange_functions(self) -> None:
         """Initialize the model to the prior distribution.
 
@@ -248,12 +257,7 @@ class MENT:
         x = self.sample(n)
         log_prob = self.log_prob(x)
         return (x, log_prob)
-
-    def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
-        """Normalize the projection."""
-        # Should be straightforward to write general method.
-        raise NotImplementedError
-
+        
     def _simulate_integrate(self, index: int, **kws) -> torch.Tensor:
         """Compute the ith projection using numerical integration."""
         raise NotImplementedError
@@ -334,12 +338,6 @@ class MENT_2D1D(MENT):
             xmax = 1.5 * max(self.diagnostic.bin_edges)
             limits = 2 * [(-xmax, +xmax)]
             self.sampler = GridSampler(limits=limits, res=200)
-
-    def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
-        """Normalize one-dimensional projection."""
-        bin_volume = self.diagnostic.bin_edges[1] - self.diagnostic.bin_edges[0]
-        normalization = projection.sum() * bin_volume
-        return projection / normalization
 
     def _simulate_integrate(self, index: int, xmax: float = None, res: int = 150, **kws) -> torch.Tensor:
         """Compute the ith projection using numerical integration.
