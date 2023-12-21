@@ -44,7 +44,7 @@ class Histogram1D(Diagnostic):
         super().__init__(**kws)
         self.axis = axis
         self.register_buffer("bin_edges", bin_edges)
-        self.register_buffer("bin_centers", centers_from_edges(self.bin_edges))
+        self.register_buffer("bin_coords", centers_from_edges(self.bin_edges))
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
         if bandwidth is None:
             bandwidth = 1.0
@@ -101,7 +101,7 @@ class Histogram2D(Diagnostic):
         self.axis = axis
         self.register_buffer("bin_edges", torch.nested.nested_tensor(bin_edges))
         self.register_buffer(
-            "bin_centers",
+            "bin_coords",
             torch.nested.nested_tensor(
                 [centers_from_edges(self.bin_edges[i]) for i in range(len(self.axis))]
             ),
