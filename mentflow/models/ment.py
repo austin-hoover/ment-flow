@@ -5,6 +5,7 @@ References
 [1] https://doi.org/10.1109/78.80970
 [2] https://doi.org/10.1103/PhysRevAccelBeams.25.042801
 """
+
 import abc
 import math
 import typing
@@ -26,10 +27,10 @@ from mentflow.utils import grab
 
 
 def interpolate_1d(
-    points: torch.Tensor,
+    points: torch.Tensor, 
     values: torch.Tensor, 
-    int_points: torch.Tensor,
-    method="linear"
+    int_points: torch.Tensor, 
+    method="linear",
 ) -> torch.Tensor:
     """Interpolate one-dimensional data."""
     points = grab(points)
@@ -37,10 +38,10 @@ def interpolate_1d(
     int_points = grab(int_points)
     int_values = np.zeros(int_points.shape[0])
     if method == "nearest":
-        fint = scipy.interpolate.interp1d(points, values, kind='nearest', bounds_error=False, fill_value=0.0)
+        fint = scipy.interpolate.interp1d(points, values, kind="nearest", bounds_error=False, fill_value=0.0)
         int_values = fint(int_points)
     elif method == "linear":
-        fint = scipy.interpolate.interp1d(points, values, kind='linear', bounds_error=False, fill_value=0.0)
+        fint = scipy.interpolate.interp1d(points, values, kind="linear", bounds_error=False, fill_value=0.0)
         int_values = fint(int_points)
     elif method == "pchip":
         interpolator = scipy.interpolate.PchipInterpolator(points, values, extrapolate=True)
@@ -49,16 +50,16 @@ def interpolate_1d(
         raise ValueError("Invalid `interpolate` method.")
     int_values = torch.from_numpy(int_values)
     return int_values
-    
+
 
 def interpolate_dd(
     points: torch.Tensor,
-    values: torch.Tensor, 
+    values: torch.Tensor,
     int_points: torch.Tensor,
     method="linear",
 ) -> torch.Tensor:
     """Interpolate d-dimensional data."""
-    if points.ndim == 1:    
+    if points.ndim == 1:
         return interpolate_1d(points, values, int_points, method=method)
 
     points = grab(points)
@@ -79,17 +80,18 @@ def interpolate_dd(
 
 class GaussianPrior:
     """Gaussian prior distribution."""
+
     def __init__(self, d=2, scale=1.0, device=None):
         mean = torch.zeros(d)
         mean = mean.type(torch.float32)
         if device is not None:
             mean = mean.to(device)
 
-        cov = torch.eye(d) * (scale ** 2)
+        cov = torch.eye(d) * (scale**2)
         cov = cov.type(torch.float32)
         if device is not None:
             cov = cov.to(device)
-            
+
         self._dist = torch.distributions.MultivariateNormal(mean, cov)
 
     def log_prob(self, x):
@@ -98,6 +100,7 @@ class GaussianPrior:
 
 class UniformPrior:
     """Uniform prior distribution."""
+
     def __init__(self, d=2, scale=10.0, device=None):
         self.scale = scale
         self.d = d
@@ -115,27 +118,29 @@ class UniformPrior:
 
 class MENT:
     """MENT reconstruction model.
-    
+
+    This should work for any dimension d and projected dimension d', but it has only
+    been tested for d = 2, d' = 1.
+
     Parameters
     ----------
     d : int
         Dimension of the phase space.
-    d_proj : int
-        Dimension of the projected space. d_proj < d.
     transforms : list[callable]
         `transforms[i](x)` maps the input d-dimensional coordinates x to the ith
         measurement location.
     diagnostic : callable
         `diagnostic(x)` generates the measurement data. The entire forward process
         is `y_i = diagnostic(transforms[i](x))`. Must have the following parameters:
-            - `bin_edges`: list[tensor], length d_proj; histogram bin edges
-            - `bin_coords`: list[tensor], length d_proj; histogram bin centers
-            - `axis`: int or tuple[int], length d_proj; the projection axis
+            - `bin_edges`: list[tensor], length d_meas; histogram bin edges
+            - `bin_coords`: list[tensor], length d_meas; histogram bin centers
+            - `axis`: int or tuple[int], length d_meas; the projection axis
     measurements : list[tensor]
-        A list of measured m-dimensional projections. They should be normalized.
+        A list of measured (d_meas < d)-dimensional projections. They should be
+        normalized.
     prior : object
-        A d-dimensional prior distribution. Must implement `prob(x)`. Defaults to uniform
-        distribution with wide support [-100, 100].
+        A d-dimensional prior distribution. Must implement `prob(x)`. Defaults to a
+        uniform distribution with wide support [-100, 100].
     sampler : callable (optional)
         Implements `sample(f, n)` method to sample points from distribution function f.
         This is only used in the `simulate_sample` method.
@@ -151,11 +156,12 @@ class MENT:
         Lagrange functions ("h functions", "component functions") {h_i(u_i)} evaluated
         at each point on the the measurement axes u_i. We can treat them as continuous
         functions by interpolating between the points.
+    d_meas : int
+        Dimension of projected space (d_meas < d).
     """
     def __init__(
         self,
         d: int,
-        d_proj: int,
         transforms: List[Callable],
         diagnostic: Callable,
         measurements: List[torch.Tensor],
@@ -170,9 +176,9 @@ class MENT:
             self.device = torch.device("cpu")
 
         self.d = d
-        self.d_proj = d_proj
         self.iteration = 0
         self.interpolate = interpolate
+
         self.transforms = transforms
         self.diagnostic = diagnostic
         self.measurements = self.set_measurements(measurements)
@@ -183,8 +189,9 @@ class MENT:
 
         self.lagrange_functions = self.initialize_lagrange_functions()
         self.sampler = sampler
-        
+
     def _send(self, x):
+        """Send tensor to torch device."""
         return x.type(torch.float32).to(self.device)
 
     def set_diagnostic(self, diagnostic: Callable):
@@ -200,14 +207,17 @@ class MENT:
         if self.measurements is None:
             self.measurements = []
         self.n_meas = len(self.measurements)
+        self.d_meas = None
+        if self.n_meas > 0:
+            self.d_meas = self.measurements[0].ndim
         return self.measurements
 
     def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
         """Normalize the projection."""
-        if self.d_proj == 1:
+        if self.d_meas == 1:
             bin_volume = self.diagnostic.bin_edges[1] - self.diagnostic.bin_edges[0]
         else:
-            bin_volume = math.prod((e[1] - e[0]) for e in self.diagnsotic.bin_edges)        
+            bin_volume = math.prod((e[1] - e[0]) for e in self.diagnsotic.bin_edges)
         return projection / projection.sum() / bin_volume
 
     def initialize_lagrange_functions(self) -> None:
@@ -237,7 +247,7 @@ class MENT:
         """Return the logarithm of the probability density at x."""
         # I think this should be general (product of h functions), but we'll need to check.
         log_prob = torch.ones(len(x))
-        log_prob = self._send(log_prob)        
+        log_prob = self._send(log_prob)
         for i, transform in enumerate(self.transforms):
             u = transform(x)
             h_func = self.evaluate_lagrange_function(i, u)
@@ -260,19 +270,112 @@ class MENT:
         x = self.sample(n)
         log_prob = self.log_prob(x)
         return (x, log_prob)
-        
-    def _simulate_integrate(self, index: int, limits: List[Tuple[float]], res: Tuple[int], **kws) -> torch.Tensor:
+
+    def _simulate_integrate(
+        self, index: int, 
+        limits: List[Tuple[float]],
+        shape: Tuple[int], 
+        **kws
+    ) -> torch.Tensor:
         """Compute the ith projection using numerical integration.
 
-        This function evaluates the density on a grid in the transformed space using
-        the Jacobian determinant of the transfer map, then integrates the density to
-        obtain the projection onto the measurement axis.
-        """
-        return
+        Parameters
+        ----------
+        index : int
+            The measurement index.
+        limits : list[tuple[float]]
+            List of (min, max) coordinate along each axis of integration grid.
+        shape : tuple[int]
+            Resolution along each axis of integration grid.
 
-    def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
-        """Compute the ith projection using particle tracking + density estimation."""
-        raise NotImplementedError
+        Returns
+        -------
+        tensor, shape (self.diagnostic.bin_coords.shape)
+            The projection onto the ith measurement axis.
+        """
+        # Grab the ith transform.
+        transform = self.transforms[index]
+
+        # Define the measurement and integration axis.
+        meas_axis = self.diagnostic.axis
+        if self.d_meas == 1:
+            meas_axis = (meas_axis,)
+        int_axis = [axis for axis in range(self.d) if axis not in meas_axis]
+
+        # Get the measurement points.
+        meas_coords = self.diagnostic.bin_coords
+        if len(meas_axis) == 1:
+            meas_points = meas_coords
+        else:
+            meas_points = get_grid_points_torch(meas_coords)
+        meas_points = self._send(meas_points)
+
+        # Get the integration points.
+        int_coords = [
+            torch.linspace(limits[k][0], limits[k][1], shape[k]) for k in range(len(int_axis))
+        ]
+        int_coords = [self._send(c) for c in int_coords]
+        if len(int_axis) == 1:
+            int_coords = int_coords[0]
+            int_points = int_coords
+        else:
+            int_points = get_grid_points_torch(int_coords)
+        int_points = self._send(int_points)
+
+        # Compute the density at each point.
+        u = torch.zeros((int_points.shape[0], self.d))
+        prediction = torch.zeros(meas_points.shape[0])
+        for i, meas_point in enumerate(meas_points):
+            # Append measurement point to integration points.
+            for k, axis in enumerate(int_axis):
+                if len(int_axis) == 1:
+                    u[:, axis] = int_points
+                else:
+                    u[:, axis] = int_points[:, k]
+            for k, axis in enumerate(meas_axis):
+                if len(meas_axis) == 1:
+                    u[:, axis] = meas_point
+                else:
+                    u[:, axis] = meas_point[k]
+            # Compute the probability density at the integration points.
+            x, ladj = transform.inverse_and_ladj(u)
+            log_prob_u = self.log_prob(x) + ladj  # check sign
+            prob_u = torch.exp(log_prob_u)
+            # Sum over the integration points.
+            prediction[i] = torch.sum(prob_u)
+
+        # Reshape and normalize the projection.
+        if self.d_meas > 1:
+            prediction = prediction.reshape(self.diagnostic.shape)
+        prediction = self._normalize_projection(prediction)
+        return prediction
+
+    def _simulate_sample(self, index: int, n: int = 1000000, **kws) -> torch.Tensor:
+        """Compute the ith projection using particle tracking + density estimation.
+
+        This function samples particles from the model distribution, tracks the
+        particles using the ith transform function, and estimates the projected
+        density using a histogram.
+
+        Parameters
+        ----------
+        index : int
+            The measurement index.
+        n : int
+            The number of particles to sample.
+
+        Returns
+        -------
+        tensor, shape (len(self.diagnostic.bin_coords),)
+            The projection onto the ith measurement axis.
+        """
+        transform = self.transforms[index]
+        x = self.sample(n)
+        x = self._send(x)
+        u = transform(x)
+        prediction = self.diagnostic(u)
+        prediction = self._normalize_projection(prediction)
+        return prediction
 
     def _simulate(self, index: int, method: str = "integrate", **kws) -> torch.Tensor:
         """Compute the ith projection.
@@ -288,7 +391,7 @@ class MENT:
                 the density on the grid using Jacobian determinant of transfer map.
             - "sample":
                 Sample particles from the distribution, track the particles using the
-                specified transform function, and estimate the projected density 
+                specified transform function, and estimate the projected density
                 using `self.diagnostic`.
         **kws
             Key word arguments passed to `self._simulate_integrate` (if method="integrate")
@@ -311,7 +414,7 @@ class MENT:
         return [self._simulate(index, **kws) for index in range(self.n_meas)]
 
     def gauss_seidel_iterate(self, *args, **kws) -> None:
-        """Execute Gauss-Seidel iteration to update lagrange multipliers.
+        """Execute Gauss-Seidel iteration to update lagrange functions.
 
         Parameters
         ----------
@@ -320,7 +423,17 @@ class MENT:
         **kws
             Key word arguments passed to `self._simulate`.
         """
-        raise NotImplementedError
+        for index, measurement in enumerate(self.measurements):
+            prediction = self._simulate(index=index, **kws)
+            shape = self.lagrange_functions[index].shape
+            lagrange_function = self.lagrange_functions[index]
+            lagrange_function = lagrange_function.ravel()
+            for j, (g_meas, g_pred) in enumerate(zip(measurement.ravel(), prediction.ravel())):
+                if (g_meas != 0.0) and (g_pred != 0.0):
+                    lagrange_function[j] *= g_meas / g_pred
+            lagrange_function = lagrange_function.reshape(shape)
+            self.lagrange_functions[index] = lagrange_function
+        self.iteration += 1
 
     def parameters(self):
         return
@@ -330,118 +443,3 @@ class MENT:
 
     def load(path):
         return
-
-
-# I'm guessing that higher dimensional versions of MENT will follow the same pattern, so 
-# we wont' need to write separate classes for each case.
-        
-
-class MENT_2D1D(MENT):
-    """2D MENT reconstruction from 1D projections."""
-    def __init__(self, **kws) -> None:
-        super().__init__(d=2, d_proj=1, **kws)
-
-        # Use grid sampler by default.
-        if self.sampler is None:
-            xmax = 1.5 * max(self.diagnostic.bin_edges)
-            limits = 2 * [(-xmax, +xmax)]
-            self.sampler = GridSampler(limits=limits, res=200)
-
-    def _simulate_integrate(self, index: int, xmax: float = None, res: int = 150, **kws) -> torch.Tensor:
-        """Compute the ith projection using numerical integration.
-
-        This function evaluates the density on a grid in the transformed space using
-        the Jacobian determinant of the transfer map, then integrates the density to
-        obtain the projection onto the measurement axis.
-
-        Parameters
-        ----------
-        index : int
-            The measurement index.
-        xmax : float
-            Defines the integration range in the transformed momentum space (u'). Defaults to
-            1.5 times the maximum measurement bin coordinate.
-        res : int
-            Number of points in the integration grid.
-
-        Returns
-        -------
-        tensor, shape (len(self.diagnostic.bin_coords),)
-            The projection onto the ith measurement axis.
-        """
-        # Define a grid in the transformed sapce.
-        if xmax is None:
-            xmax = 1.5 * max(self.diagnostic.bin_coords)
-        int_grid_xmax = xmax  # integration limits
-        int_res = res  # integration grid resolution
-        grid_shape = (len(self.diagnostic.bin_coords), int_res)
-        grid_coords = [
-            self.diagnostic.bin_coords,  # measurement axis
-            torch.linspace(-int_grid_xmax, +int_grid_xmax, int_res),  # integration axis
-        ]
-        grid_coords = [self._send(c) for c in grid_coords]
-        grid_points = get_grid_points_torch(grid_coords)
-        grid_points = self._send(grid_points)
-
-        # Compute the density at each grid point.
-        transform = self.transforms[index]
-        grid_points_in, ladj = transform.inverse_and_ladj(grid_points) 
-        log_prob_in = self.log_prob(grid_points_in)
-        log_prob_out = log_prob_in + ladj  # check sign
-        prob_out = torch.exp(log_prob_out)
-        prob_out = prob_out.reshape(grid_shape)
-
-        # Compute the projection in the transformed space.
-        prediction = torch.sum(prob_out, dim=1)
-        prediction = self._normalize_projection(prediction)
-        return prediction
-
-    def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
-        """Compute the ith projection using particle tracking + density estimation.
-
-        This function samples particles from the model distribution, tracks the
-        particles using the ith transform function, and estimates the projected
-        density using a histogram.
-
-        Consequently, the forward process does not need to be invertible. 
-
-        Parameters
-        ----------
-        index : int
-            The measurement index.
-        n : int
-            The number of particles to sample.
-
-        Returns
-        -------
-        tensor, shape (len(self.diagnostic.bin_coords),)
-            The projection onto the ith measurement axis.
-        """
-        transform = self.transforms[index]
-        x = self.sample(n)
-        x = self._send(x)
-        u = transform(x)
-        prediction = self.diagnostic(u)
-        prediction = self._normalize_projection(prediction)
-        return prediction
-
-    def gauss_seidel_iterate(self, *args, **kws) -> None:
-        """Execute Gauss-Seidel iteration to update lagrange multipliers.
-
-        Parameters
-        ----------
-        *args
-            Arguments passed to `self._simulate`.
-        **kws
-            Key word arguments passed to `self._simulate`.
-        """
-        for i, (transform, measurement) in enumerate(zip(self.transforms, self.measurements)):
-            prediction = self._simulate(index=i, **kws)
-            for j in range(len(self.lagrange_functions[i])):
-                g_meas = float(measurement[j])
-                g_pred = float(prediction[j])
-                if (g_meas != 0.0) and (g_pred != 0.0):
-                    self.lagrange_functions[i][j] *= (g_meas / g_pred)
-        self.iteration += 1
-
-
