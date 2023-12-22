@@ -43,6 +43,7 @@ class Histogram1D(Diagnostic):
         """
         super().__init__(**kws)
         self.axis = axis
+        self.shape = len(bin_edges) - 1
         self.register_buffer("bin_edges", bin_edges)
         self.register_buffer("bin_coords", centers_from_edges(self.bin_edges))
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
@@ -51,7 +52,7 @@ class Histogram1D(Diagnostic):
         self.register_buffer("bandwidth", bandwidth * self.resolution)
         self.kde = kde
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
 
         Parameters
@@ -99,6 +100,7 @@ class Histogram2D(Diagnostic):
         """
         super().__init__(**kws)
         self.axis = axis
+        self.shape = tuple([(len(e) - 1) for e in bin_edges])
         self.register_buffer("bin_edges", torch.nested.nested_tensor(bin_edges))
         self.register_buffer(
             "bin_coords",
@@ -122,7 +124,7 @@ class Histogram2D(Diagnostic):
         self.register_buffer("bandwidth", torch.tensor(bandwidth))
         self.kde = kde
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
 
         Parameters
