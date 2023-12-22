@@ -63,10 +63,10 @@ class Linear(Transform):
         return self    
 
 
-class CompositeTransform(nn.Module):
+class CompositeTransform(Transform):
     def __init__(self, transforms) -> None:
         super().__init__()
-        self.transforms = nn.Sequential(transforms)
+        self.transforms = nn.Sequential(*transforms)
 
     def forward_and_ladj(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         ladj = 0.0
