@@ -64,7 +64,7 @@ parser.add_argument("--data-warp", type=int, default=0)
 parser.add_argument("--meas", type=int, default=6)
 parser.add_argument("--meas-angle", type=int, default=180.0)
 parser.add_argument("--meas-bins", type=int, default=75)
-parser.add_argument("--meas-noise", type=float, default=None)
+parser.add_argument("--meas-noise", type=float, default=0.0, help="fractional noise")
 parser.add_argument("--xmax", type=float, default=3.0)
 
 # Model
@@ -180,12 +180,18 @@ diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
 diagnostics = [diagnostic]
 
-# Generate measurement data. (Use histogram rather than KDE.)
+# Generate training data.
 diagnostic.kde = False
 measurements = mf.simulate(x0, transforms, diagnostics)
 if args.meas_noise:
-    for i, measurement in enumerate(measurements):
-        measurements[i] = measurement + args.meas_noise * torch.randn(measurement.shape[0])
+    for i in range(len(measurements)):
+        for j in range(len(measurements[i])):
+            measurement = measurements[i][j]
+            frac_noise = args.meas_noise * torch.randn(measurement.shape[0])
+            frac_noise = send(frac_noise)
+            measurement = measurement * (1.0 + frac_noise)
+            measurement = torch.clamp(measurement, 0.0, None)
+            measurements[i][j] = measurement
 diagnostic.kde = True
 
 
