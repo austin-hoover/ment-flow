@@ -74,7 +74,7 @@ parser.add_argument("--hidden-layers", type=int, default=3)
 parser.add_argument("--spline-bins", type=int, default=20)
 parser.add_argument("--perm", type=int, default=1)
 parser.add_argument("--base-scale", type=float, default=1.0)
-parser.add_argument("--targ-scale", type=float, default=1.0)
+parser.add_argument("--prior-scale", type=float, default=1.0)
 
 # Training
 parser.add_argument("--batch-size", type=int, default=40000)
@@ -103,7 +103,8 @@ parser.add_argument("--vis-freq", type=int, default=None)
 parser.add_argument("--vis-bins", type=int, default=125)
 parser.add_argument("--vis-maxcols", type=int, default=7)
 parser.add_argument("--vis-res", type=int, default=250)
-parser.add_argument("--vis-size", type=int, default=int(1.00e06))
+parser.add_argument("--vis-size", type=int, default=int(1.00e+06))
+parser.add_argument("--vis-line", type=str, default="line", choices=["line", "step"])
 parser.add_argument("--fig-dpi", type=float, default=300)
 parser.add_argument("--fig-ext", type=str, default="png")
 
@@ -155,7 +156,7 @@ mf.utils.save_pickle(dist, man.get_path("dist.pkl"))
 
 # Draw samples from the input distribution.
 x0 = dist.sample(args.data_size)
-x0 = send(torch.from_numpy(x0))
+x0 = send(x0)
 
 # Define linear transformations.
 angles = np.linspace(0.0, np.radians(args.meas_angle), args.meas, endpoint=False)
@@ -174,7 +175,6 @@ for matrix in transfer_matrices:
 xmax = args.xmax
 bin_edges = torch.linspace(-xmax, xmax, args.meas_bins + 1)
 bin_edges = send(bin_edges)
-bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
 
 diagnostic = mf.diagnostics.Histogram1D(axis=0, bin_edges=bin_edges)
 diagnostic = diagnostic.to(device)
@@ -207,7 +207,7 @@ prior = None
 if not args.absent:
     prior = zuko.distributions.DiagNormal(
         send(torch.zeros(d)),
-        send(args.targ_scale * torch.ones(d)),
+        send(args.prior_scale * torch.ones(d)),
     )
 
 entropy_estimator = mf.entropy.MonteCarloEntropyEstimator()
@@ -261,6 +261,7 @@ def make_plots(x, prob, predictions):
         predictions,
         bin_edges=grab(diagnostic.bin_edges),
         maxcols=args.vis_maxcols,
+        kind=args.vis_line,
     )
     figs.append(fig)
 
@@ -302,10 +303,10 @@ diagnostic.kde = False
 for method in ["sart", "fbp"]:    
     _measurements = [grab(measurement) for measurement in unravel(measurements)]
     prob = utils.reconstruct_tomo(_measurements, angles, method=method, iterations=10)
-    coords = 2 * [grab(diagnostic.bin_centers)]
-    prob, coords = mf.utils.set_image_shape(prob, coords, (args.vis_res, args.vis_res))
+    edges = 2 * [grab(diagnostic.bin_edges)]
+    prob, edges = mf.utils.set_image_shape(prob, edges, (args.vis_res, args.vis_res))
         
-    x = mf.utils.sample_hist(prob, coords=coords, n=args.vis_size)
+    x = mf.utils.sample_hist(prob, edges, n=args.vis_size)
     x = torch.from_numpy(x)
     x = send(x)
     

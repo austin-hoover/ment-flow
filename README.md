@@ -7,7 +7,7 @@ This repo is under development and may be replaced in the future.
 
 ## Installation
 
-Currently works with Python 3.8. Here is my current setup procedure:
+Currently works with Python 3.8. Setup procedure:
 
 ```
 conda create -n ment-flow python=3.8
@@ -21,5 +21,5 @@ pip install -e .
 ## Experiments
 
 ```
-python experiments/2d_from_1d/train.py --device=mps
+python experiments/2d_from_1d/train_flow.py --device=mps
 ```

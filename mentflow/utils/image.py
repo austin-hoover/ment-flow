@@ -73,7 +73,7 @@ def get_grid_points_torch(coords):
     return torch.vstack([C.ravel() for C in torch.meshgrid(*coords, indexing="ij")]).T
 
 
-def set_image_shape(image, coords, shape):
+def set_image_shape(image, edges, shape):
     image = skimage.transform.resize(image, shape)
-    coords = [np.linspace(coords[i][0], coords[i][-1], shape[i]) for i in range(len(coords))]
-    return image, coords
+    edges = [np.linspace(edges[i][0], edges[i][-1], shape[i] + 1) for i in range(len(edges))]
+    return image, edges

@@ -20,7 +20,15 @@ def plot_dist(x0, x, prob=None, coords=None, n_bins=75, limits=None, **kws):
     return fig, axs
     
 
-def plot_proj(measurements, predictions=None, bin_edges=None, maxcols=7):
+def plot_proj(measurements, predictions=None, bin_edges=None, maxcols=7, kind="step"):
+    
+    def _plot(heights, edges, ax=None, kind="step", **kws):
+        if kind == "step":
+            return ax.stairs(heights, edges, **kws)
+        else:
+            coords = 0.5 * (edges[:-1] + edges[1:])
+            return ax.plot(coords, heights, **kws)
+    
     ncols = min(len(measurements), maxcols)
     nrows = int(np.ceil(len(measurements) / ncols))
     figheight = 1.75 * nrows
@@ -31,10 +39,10 @@ def plot_proj(measurements, predictions=None, bin_edges=None, maxcols=7):
         measurement = measurements[j]
         scale = np.max(measurement)
         kws = dict(lw=1.25)
-        ax.stairs(measurement / scale, bin_edges, color="black", **kws)
+        _plot(measurement / scale, bin_edges, ax=ax, kind=kind, color="black", **kws)
         if predictions is not None:
             prediction = predictions[j]
-            ax.stairs(prediction / scale, bin_edges, color="red", **kws)
+            _plot(prediction / scale, bin_edges, ax=ax, kind=kind, color="red", **kws)
     axs.format(ymax=1.25)
     return fig, axs
 
