@@ -20,7 +20,7 @@ def plot_dist(x0, x, prob=None, coords=None, n_bins=75, limits=None, **kws):
     return fig, axs
     
 
-def plot_proj(measurements, predictions=None, bin_edges=None, maxcols=7, kind="step"):
+def plot_proj(measurements, predictions=None, bin_edges=None, maxcols=7, kind="step", height=1.3):
     
     def _plot(heights, edges, ax=None, kind="step", **kws):
         if kind == "step":
@@ -31,8 +31,8 @@ def plot_proj(measurements, predictions=None, bin_edges=None, maxcols=7, kind="s
     
     ncols = min(len(measurements), maxcols)
     nrows = int(np.ceil(len(measurements) / ncols))
-    figheight = 1.75 * nrows
-    figwidth = 1.25 * ncols * 1.75
+    figheight = height * nrows
+    figwidth = 1.75 * ncols
     fig, axs = pplt.subplots(ncols=ncols, nrows=nrows, figheight=figheight, figwidth=figwidth)
     for j in range(len(measurements)):
         ax = axs[j]
