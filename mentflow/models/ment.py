@@ -8,6 +8,7 @@ References
 
 import abc
 import math
+import time
 import typing
 from typing import Any
 from typing import Callable
@@ -157,7 +158,9 @@ class MENT:
         at each point on the the measurement axes u_i. We can treat them as continuous
         functions by interpolating between the points.
     d_meas : int
-        Dimension of projected space (d_meas < d).
+        Dimension of measurement axis. (d_meas < d)
+    d_int : int
+        Dimension of integration axis. (d_int = d - d_meas)
     """
     def __init__(
         self,
@@ -176,11 +179,12 @@ class MENT:
             self.device = torch.device("cpu")
 
         self.d = d
+        self.d_meas = self.d_int = None
         self.iteration = 0
         self.interpolate = interpolate
 
         self.transforms = transforms
-        self.diagnostic = diagnostic
+        self.diagnostic = self.set_diagnostic(diagnostic)
         self.measurements = self.set_measurements(measurements)
 
         self.prior = prior
@@ -190,7 +194,7 @@ class MENT:
         self.lagrange_functions = self.initialize_lagrange_functions()
         self.sampler = sampler
 
-    def _send(self, x):
+    def send(self, x):
         """Send tensor to torch device."""
         return x.type(torch.float32).to(self.device)
 
@@ -198,7 +202,13 @@ class MENT:
         """Set the diagnostic (histogrammer)."""
         self.diagnostic = diagnostic
         if self.diagnostic is not None:
-            self.proj_axis = self.diagnostic.axis
+            self.meas_axis = self.diagnostic.axis
+            if type(self.meas_axis) is int:
+                self.meas_coords = self.diagnostic.bin_coords
+                self.meas_points = self.meas_coords
+            else:
+                self.meas_coords = [c for c in self.diagnostic.bin_coords]
+                self.meas_points = self.send(get_grid_points_torch(self.meas_coords))
         return self.diagnostic
 
     def set_measurements(self, measurements: List[torch.Tensor]):
@@ -208,8 +218,10 @@ class MENT:
             self.measurements = []
         self.n_meas = len(self.measurements)
         self.d_meas = None
+        self.d_int = None
         if self.n_meas > 0:
             self.d_meas = self.measurements[0].ndim
+            self.d_int = self.d - self.d_meas
         return self.measurements
 
     def _normalize_projection(self, projection: np.ndarray) -> np.ndarray:
@@ -217,7 +229,7 @@ class MENT:
         if self.d_meas == 1:
             bin_volume = self.diagnostic.bin_edges[1] - self.diagnostic.bin_edges[0]
         else:
-            bin_volume = math.prod((e[1] - e[0]) for e in self.diagnsotic.bin_edges)
+            bin_volume = math.prod((e[1] - e[0]) for e in self.diagnostic.bin_edges)
         return projection / projection.sum() / bin_volume
 
     def initialize_lagrange_functions(self) -> None:
@@ -233,25 +245,24 @@ class MENT:
         return self.lagrange_functions
 
     def evaluate_lagrange_function(self, index: int, u: torch.Tensor) -> torch.Tensor:
-        """Evaluate lagrange function h_i(u_i) at transformed point u."""
-        points = self.diagnostic.bin_coords
-        values = self.lagrange_functions[index]
-        values = self._send(values)
-        int_points = u[:, self.diagnostic.axis]
+        """Evaluate lagrange function h(u) at transformed points u."""
+        points = self.meas_points
+        values = self.lagrange_functions[index].ravel()
+        values = self.send(values)
+        int_points = u[:, self.meas_axis]
         int_values = interpolate_dd(points, values, int_points, method=self.interpolate)
         int_values = torch.clamp(int_values, 0.0, None)
-        int_values = self._send(int_values)
+        int_values = self.send(int_values)
         return int_values
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
         """Return the logarithm of the probability density at x."""
-        # I think this should be general (product of h functions), but we'll need to check.
         log_prob = torch.ones(len(x))
-        log_prob = self._send(log_prob)
+        log_prob = self.send(log_prob)
         for i, transform in enumerate(self.transforms):
             u = transform(x)
-            h_func = self.evaluate_lagrange_function(i, u)
-            log_prob += torch.log(h_func + 1.00e-12)
+            h_u = self.evaluate_lagrange_function(i, u)
+            log_prob += torch.log(h_u + 1.00e-12)
         log_prob += self.prior.log_prob(x)
         return log_prob
 
@@ -262,7 +273,7 @@ class MENT:
     def sample(self, n: int) -> torch.Tensor:
         """Sample particles from the distribution."""
         x = self.sampler(log_prob_func=self.log_prob, n=n)
-        x = self._send(x)
+        x = self.send(x)
         return x
 
     def sample_and_log_prob(self, n: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -272,12 +283,13 @@ class MENT:
         return (x, log_prob)
 
     def _simulate_integrate(
-        self, index: int, 
+        self, 
+        index: int,
         limits: List[Tuple[float]],
         shape: Tuple[int], 
         **kws
     ) -> torch.Tensor:
-        """Compute the ith projection using numerical integration.
+        """Compute projections using numerical integration.
 
         Parameters
         ----------
@@ -290,50 +302,48 @@ class MENT:
 
         Returns
         -------
-        tensor, shape (self.diagnostic.bin_coords.shape)
-            The projection onto the ith measurement axis.
-        """
-        # Grab the ith transform.
-        transform = self.transforms[index]
-
-        # Define the measurement and integration axis.
-        meas_axis = self.diagnostic.axis
+        list[tensor]
+            The ith projection onto the measurement axis.
+        """                
+        # Define the measurement axis.
+        meas_axis = self.meas_axis
         if self.d_meas == 1:
             meas_axis = (meas_axis,)
-        int_axis = [axis for axis in range(self.d) if axis not in meas_axis]
 
         # Get the measurement points.
-        meas_coords = self.diagnostic.bin_coords
-        if len(meas_axis) == 1:
-            meas_points = meas_coords
-        else:
-            meas_points = get_grid_points_torch(meas_coords)
-        meas_points = self._send(meas_points)
+        meas_points = self.meas_points
 
-        # Get the integration points.
+        # Define the integration axis.
+        int_axis = [axis for axis in range(self.d) if axis not in meas_axis]
+
+        # Get the integration points in the transformed space.
         int_coords = [
-            torch.linspace(limits[k][0], limits[k][1], shape[k]) for k in range(len(int_axis))
+            torch.linspace(limits[k][0], limits[k][1], shape[k]) 
+            for k in range(len(int_axis))
         ]
-        int_coords = [self._send(c) for c in int_coords]
+        int_coords = [self.send(c) for c in int_coords]
         if len(int_axis) == 1:
             int_coords = int_coords[0]
             int_points = int_coords
         else:
             int_points = get_grid_points_torch(int_coords)
-        int_points = self._send(int_points)
+        int_points = self.send(int_points)
 
-        # Compute the density at each point.
+        # Initialize transformed coordinate vector u.
         u = torch.zeros((int_points.shape[0], self.d))
+        for k, axis in enumerate(int_axis):
+            if len(int_axis) == 1:
+                u[:, axis] = int_points
+            else:
+                u[:, axis] = int_points[:, k]
+
+        # Integrate
         prediction = torch.zeros(meas_points.shape[0])
+        transform = self.transforms[index]
         for i, meas_point in enumerate(meas_points):
-            # Append measurement point to integration points.
-            for k, axis in enumerate(int_axis):
-                if len(int_axis) == 1:
-                    u[:, axis] = int_points
-                else:
-                    u[:, axis] = int_points[:, k]
+            # Append the measurement point to the integration points.
             for k, axis in enumerate(meas_axis):
-                if len(meas_axis) == 1:
+                if self.d_meas == 1:
                     u[:, axis] = meas_point
                 else:
                     u[:, axis] = meas_point[k]
@@ -343,37 +353,33 @@ class MENT:
             prob_u = torch.exp(log_prob_u)
             # Sum over the integration points.
             prediction[i] = torch.sum(prob_u)
-
+            
         # Reshape and normalize the projection.
         if self.d_meas > 1:
             prediction = prediction.reshape(self.diagnostic.shape)
         prediction = self._normalize_projection(prediction)
         return prediction
 
-    def _simulate_sample(self, index: int, n: int = 1000000, **kws) -> torch.Tensor:
-        """Compute the ith projection using particle tracking + density estimation.
-
-        This function samples particles from the model distribution, tracks the
-        particles using the ith transform function, and estimates the projected
-        density using a histogram.
+    def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
+        """Simulate the ith projection using particle tracking + density estimation.
 
         Parameters
         ----------
         index : int
             The measurement index.
         n : int
-            The number of particles to sample.
+            The number of samples to use.
 
         Returns
         -------
-        tensor, shape (len(self.diagnostic.bin_coords),)
-            The projection onto the ith measurement axis.
+        list[tensor]
+            The projections onto the measurement axis.
         """
-        transform = self.transforms[index]
+        t0 = time.time()
         x = self.sample(n)
-        x = self._send(x)
-        u = transform(x)
-        prediction = self.diagnostic(u)
+        x = self.send(x)
+        transform = self.transforms[index]
+        prediction = self.diagnostic(transform(x))
         prediction = self._normalize_projection(prediction)
         return prediction
 
@@ -408,19 +414,13 @@ class MENT:
         }
         _function = _functions[method]
         return _function(index=index, **kws)
-
-    def simulate(self, **kws) -> torch.Tensor:
-        """Compute all projections. Same arguments as `self._simulate`."""
-        return [self._simulate(index, **kws) for index in range(self.n_meas)]
-
-    def gauss_seidel_iterate(self, *args, **kws) -> None:
+        
+    def gauss_seidel_iterate(self, **kws) -> None:
         """Execute Gauss-Seidel iteration to update lagrange functions.
 
         Parameters
         ----------
-        *args
-            Arguments passed to `self._simulate`.
-        **kws
+        **kwargs
             Key word arguments passed to `self._simulate`.
         """
         for index, measurement in enumerate(self.measurements):
@@ -434,6 +434,23 @@ class MENT:
             lagrange_function = lagrange_function.reshape(shape)
             self.lagrange_functions[index] = lagrange_function
         self.iteration += 1
+
+    def simulate(self, method="integrate", **kws):
+        """Simulate all projections."""
+        predictions = []
+        if method == "integrate":
+            for index in range(self.n_meas):
+                prediction = self._simulate_integrate(index=index, **kws)
+                predictions.append(prediction)
+        elif method == "sample":
+            n = kws.get("n", 100000)
+            x = self.sample(n)
+            x = self.send(x)
+            for index, transform in enumerate(self.transforms):
+                prediction = self.diagnostic(transform(x))
+                prediction = self._normalize_projection(prediction)
+                predictions.append(prediction)
+        return predictions
 
     def parameters(self):
         return
