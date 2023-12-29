@@ -98,14 +98,17 @@ class CompositeTransform(Transform):
         return self
 
 
-def Projection1D(Transform):
+class Project1D(Transform):
     def __init__(self, v: torch.Tensor):
         super().__init__()
-        self.v = v
+        self.v = v / torch.norm(v)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.sum(x * self.v, dim=1)
-
+        u = x
+        u[:, 0] = torch.sum(x * self.v, dim=1)
+        u[:, 1:] = 0.0
+        return u
+        
 
 def rotation_matrix(angle):
     _cos = np.cos(angle)
