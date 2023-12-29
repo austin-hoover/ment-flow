@@ -118,6 +118,7 @@ class Monitor:
         self.start_time = None
         self.best_loss = float("inf")
         self.best_state_dict = model.state_dict()
+        self.freq = freq
 
     def action(
         self, 
@@ -129,6 +130,9 @@ class Monitor:
         batch_size: int
     ) -> None:
         """Update history array."""
+        if (iteration + 1) % self.freq != 0:
+            return
+            
         if self.start_time is None:
             self.start_time = time.time()
         time_ellapsed = time.time() - self.start_time
