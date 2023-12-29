@@ -104,10 +104,7 @@ class Project1D(Transform):
         self.v = v / torch.norm(v)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        u = x
-        u[:, 0] = torch.sum(x * self.v, dim=1)
-        u[:, 1:] = 0.0
-        return u
+        return torch.sum(x * self.v, dim=1)[:, None]
         
 
 def rotation_matrix(angle):
