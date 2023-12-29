@@ -45,15 +45,18 @@ parser.add_argument("--seed", type=int, default=None)
 parser.add_argument(
     "--data",
     type=str,
-    default="swissroll",
+    default="galaxy",
     choices=[
-        "circles",
-        "gaussians",
+        "eight-gaussians",
+        "galaxy",
+        "gaussian",
         "hollow",
         "kv",
+        "leaf",
         "pinwheel",
-        "spirals",
+        "rings",
         "swissroll",
+        "two-spirals",
         "waterbag",
     ],
 )
