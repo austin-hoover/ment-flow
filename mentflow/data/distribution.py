@@ -3,7 +3,7 @@ import torch
 
 
 class Distribution:
-    def __init__(self, d=2, rng=None, normalize=True, shuffle=True, noise=None, decorr=False):
+    def __init__(self, d=2, rng=None, normalize=False, shuffle=True, noise=None, decorr=False):
         self.d = d
         self.rng = rng
         if self.rng is None:
@@ -19,7 +19,7 @@ class Distribution:
     def prob(self, x):
         raise NotImplementedError 
 
-    def sample(self, n):
+    def sample_numpy(self, n):
         x = self._sample(n)
         if self.shuffle:
             x = shuffle(x, rng=self.rng)
@@ -29,7 +29,10 @@ class Distribution:
             x = corrupt(x, self.noise, rng=self.rng)
         if self.decorr:
             x = decorrelate(x, rng=self.rng)
-        return torch.from_numpy(x)
+        return x
+
+    def sample(self, n):
+        return torch.from_numpy(self.sample_numpy(n))
 
 
 def corrupt(x, scale, rng=None):
@@ -51,7 +54,7 @@ def decorrelate(x, rng=None):
 
 def normalize(x):
     x = x - np.mean(x, axis=0)
-    x = x / np.max(np.std(x, axis=0))
+    x = x / np.std(x, axis=0)
     return x
 
 

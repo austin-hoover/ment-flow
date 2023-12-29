@@ -5,11 +5,8 @@ from mentflow.data.distribution import Distribution
 from mentflow.data.distribution import decorrelate
 
 
-def normalize(X):
-    return np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, X)
-
-
 class Gaussian(Distribution):
+    """Spherical Gaussian distribution."""
     def __init__(self, **kws):
         super().__init__(**kws)
 
@@ -18,6 +15,7 @@ class Gaussian(Distribution):
         
 
 class KV(Distribution):
+    """Kapchinskij-Vladimirskij distribution (uniformly populated sphere)."""
     def __init__(self, **kws):
         super().__init__(**kws)
         if self.noise is None:
@@ -25,20 +23,25 @@ class KV(Distribution):
 
     def _sample(self, n):
         X = self.rng.normal(size=(n, self.d))
-        return np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, X)
+        X = np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, X)
+        X = X / np.std(X, axis=0)
+        return X
         
 
 class WaterBag(Distribution):
+    """Waterbag distribution (uniformly populated ball)."""
     def __init__(self, **kws):
         super().__init__(**kws)
         if self.noise is None:
             self.noise = 0.05
 
     def _sample(self, n):
-        X = KV(d=self.d, rng=self.rng).sample(n)
+        X = KV(d=self.d, rng=self.rng).sample_numpy(n)
         r = self.rng.uniform(0.0, 1.0, size=n) ** (1.0 / self.d)
         r = r[:, None]
-        return X * r
+        X = X * r
+        X = X / np.std(X, axis=0)
+        return X
 
 
 class Hollow(Distribution):
@@ -49,12 +52,14 @@ class Hollow(Distribution):
             self.noise = 0.05
 
     def _sample(self, n):
-        X = KV(d=self.d, rng=self.rng).sample(n)
+        X = KV(d=self.d, rng=self.rng).sample_numpy(n)
         r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** self.exp
-        return X * r[:, None]
+        X = X * r[:, None]
+        X = X / np.std(X, axis=0)
+        return X
 
 
-class Spheres(Distribution):
+class Rings(Distribution):
     def __init__(self, n_rings=2, **kws):
         super().__init__(**kws)
         self.n_rings = n_rings
@@ -70,14 +75,16 @@ class Spheres(Distribution):
         for size, radius in zip(sizes, radii):
             X.append(radius * dist.sample(size))
         X = np.vstack(X)
+        X = X / np.std(X, axis=0)
         return X
+        
 
 
 DISTRIBUTIONS = {
     "gaussian": Gaussian,
     "kv": KV,
     "hollow": Hollow,
-    "spheres": Spheres,
+    "rings": Rings,
     "waterbag": WaterBag,
 }
 
