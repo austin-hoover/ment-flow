@@ -31,14 +31,15 @@ class GridSampler:
         if res is not None:
             self.res = res
         self.d = len(limits)
-        self.coords = [
-            torch.linspace(self.limits[i][0], self.limits[i][1], self.res) 
+        self.grid_edges = [
+            torch.linspace(self.limits[i][0], self.limits[i][1], self.res + 1) 
             for i in range(self.d)
         ]
+        self.grid_coords = [0.5 * (e[:-1] + e[1:]) for e in self.grid_edges]
         self.shape = self.d * [self.res]
 
     def get_mesh(self) -> List[torch.Tensor]:
-        return torch.meshgrid(*self.coords, indexing="ij")
+        return torch.meshgrid(*self.grid_coords, indexing="ij")
 
     def get_grid_points(self) -> torch.Tensor:
         return torch.vstack([C.ravel() for C in self.get_mesh()]).T
@@ -49,6 +50,6 @@ class GridSampler:
         log_values = log_prob_func(grid_points)
         values = torch.exp(log_values)
         values = values.reshape(self.shape)
-        x = sample_hist_torch(values, self.coords, n)
+        x = sample_hist_torch(values, bin_edges=self.grid_edges, n=n)
         x = self._send(x)
         return x
