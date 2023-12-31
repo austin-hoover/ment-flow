@@ -390,10 +390,10 @@ class Trainer:
             
             D_norm = self.monitor.meters["D_norm"].avg  
             
-            print(f"D_norm={:0.3e}".format(D_norm))
-            print(f"D_norm_old={:0.3e}".format(D_norm_old))
-            print(f"frac={:0.3e}".format(D_norm / D_norm_old))
-            print(f"diff={:0.3e}".format(D_norm - D_norm_old))
+            print("D_norm={:0.3e}".format(D_norm))
+            print("D_norm_old={:0.3e}".format(D_norm_old))
+            print("frac={:0.3e}".format(D_norm / D_norm_old))
+            print("diff={:0.3e}".format(D_norm - D_norm_old))
 
             if D_norm > (1.0 - rtol) * D_norm_old:
                 converged = True
