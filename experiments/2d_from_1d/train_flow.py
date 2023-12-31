@@ -24,7 +24,6 @@ from mentflow.wrappers import WrappedZukoFlow
 
 # Local
 import plotting
-import utils
 
 
 # Plot settings
@@ -90,7 +89,7 @@ parser.add_argument("--penalty-scale", type=float, default=1.1)
 parser.add_argument("--penalty-max", type=float, default=None)
 parser.add_argument("--rtol", type=float, default=0.0)
 parser.add_argument("--atol", type=float, default=0.0)
-parser.add_argument("--dmax", type=float, default=0.0)
+parser.add_argument("--dmax", type=float, default=5.00e-04)
 parser.add_argument("--absent", type=int, default=0, help="use absolute entropy")
 
 # Optimizer (ADAM)
@@ -302,38 +301,6 @@ def plotter(model):
         diagnostic.kde = True
 
     return make_plots(grab(x), grab(prob), predictions)
-
-
-# FBP/SART benchmarks
-# --------------------------------------------------------------------------------------
-
-diagnostic.kde = False
-
-for method in ["sart", "fbp"]:    
-    _measurements = [grab(measurement) for measurement in unravel(measurements)]
-    prob = utils.reconstruct_tomo(_measurements, angles, method=method, iterations=10)
-    edges = 2 * [grab(diagnostic.bin_edges)]
-    prob, edges = mf.utils.set_image_shape(prob, edges, (args.vis_res, args.vis_res))
-        
-    x = mf.utils.sample_hist(prob, edges, n=args.vis_size)
-    x = torch.from_numpy(x)
-    x = send(x)
-    
-    predictions = model.simulate(x)
-    predictions = [grab(prediction) for prediction in unravel(predictions)]
-
-    figs = make_plots(grab(x), prob, predictions)
-
-    filename = f"fig__test_{method}_00.{args.fig_ext}"
-    filename = os.path.join(man.outdir, f"figures/{filename}")
-    figs[0].savefig(filename, dpi=args.fig_dpi)
-
-    filename = f"fig__test_{method}_01.{args.fig_ext}"
-    filename = os.path.join(man.outdir, f"figures/{filename}")
-    figs[1].savefig(filename, dpi=args.fig_dpi)
-    plt.close("all")
-
-diagnostic.kde = True
 
 
 # Training loop

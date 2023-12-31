@@ -23,7 +23,6 @@ from mentflow.utils import unravel
 
 # Local
 import plotting
-import utils
 
 
 # Plot settings
@@ -283,38 +282,6 @@ def plotter(model):
     for diagnostics in model.diagnostics:
         diagnostic.kde = True
     return make_plots(grab(x), predictions)
-
-
-# FBP/SART benchmarks
-# --------------------------------------------------------------------------------------
-
-diagnostic.kde = False
-
-for method in ["sart", "fbp"]:    
-    _measurements = [grab(measurement) for measurement in unravel(measurements)]
-    prob = utils.reconstruct_tomo(_measurements, angles, method=method, iterations=10)
-    coords = 2 * [grab(diagnostic.bin_centers)]
-    prob, coords = mf.utils.set_image_shape(prob, coords, (args.vis_res, args.vis_res))
-        
-    x = mf.utils.sample_hist(prob, coords=coords, n=args.vis_size)
-    x = torch.from_numpy(x)
-    x = send(x)
-    
-    predictions = model.simulate(x)
-    predictions = [grab(prediction) for prediction in unravel(predictions)]
-
-    figs = make_plots(grab(x), predictions)
-
-    filename = f"fig__test_{method}_00.{args.fig_ext}"
-    filename = os.path.join(man.outdir, f"figures/{filename}")
-    figs[0].savefig(filename, dpi=args.fig_dpi)
-
-    filename = f"fig__test_{method}_01.{args.fig_ext}"
-    filename = os.path.join(man.outdir, f"figures/{filename}")
-    figs[1].savefig(filename, dpi=args.fig_dpi)
-    plt.close("all")
-
-diagnostic.kde = True
 
 
 # Training loop
