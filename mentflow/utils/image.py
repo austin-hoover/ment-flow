@@ -52,12 +52,12 @@ def sample_hist_torch(hist, bin_edges=None, n=1):
     return x
 
 
-def get_grid_points(coords):
+def get_grid_points(*coords):
     """Return list of grid coordinates from coordinate arrays along each axis.
 
     Parameters
     ----------
-    coords : list[ndarray]
+    coords : iterable[ndarray]
         Coordinates along each axis of regular grid. Example: [[1, 2, 3], [0, 1, 2]].
 
     Returns
@@ -69,7 +69,7 @@ def get_grid_points(coords):
     return np.vstack([C.ravel() for C in np.meshgrid(*coords, indexing="ij")]).T
 
 
-def get_grid_points_torch(coords):
+def get_grid_points_torch(*coords):
     return torch.vstack([C.ravel() for C in torch.meshgrid(*coords, indexing="ij")]).T
 
 
