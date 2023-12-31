@@ -101,27 +101,20 @@ class Histogram2D(Diagnostic):
         super().__init__(**kws)
         self.axis = axis
         self.shape = tuple([(len(e) - 1) for e in bin_edges])
-        self.register_buffer("bin_edges", torch.nested.nested_tensor(bin_edges))
-        self.register_buffer(
-            "bin_coords",
-            torch.nested.nested_tensor(
-                [centers_from_edges(self.bin_edges[i]) for i in range(len(self.axis))]
-            ),
-        )
+        self.register_buffer("bin_edges_x", bin_edges[0])
+        self.register_buffer("bin_edges_y", bin_edges[1])
+        self.register_buffer("bin_coords_x", centers_from_edges(bin_edges[0]))
+        self.register_buffer("bin_coords_y", centers_from_edges(bin_edges[1]))
+        self.register_buffer("resolution_x", self.bin_edges_x[1] - self.bin_edges_x[0])
+        self.register_buffer("resolution_y", self.bin_edges_y[1] - self.bin_edges_y[0])
 
         d = len(axis)
-        resolution = torch.zeros(d)
-        for i in range(d):
-            resolution[i] = self.bin_edges[i][1] - self.bin_edges[i][0]
-        self.register_buffer("resolution", resolution)
-
         if bandwidth is None:
             bandwidth = d * [1.0]
         if type(bandwidth) in [float, int]:
             bandwidth = d * [bandwidth]
-        for i in range(d):
-            bandwidth[i] = bandwidth[i] * self.resolution[i]
-        self.register_buffer("bandwidth", torch.tensor(bandwidth))
+        self.register_buffer("bandwidth_x", bandwidth[0] * self.resolution_x)
+        self.register_buffer("bandwidth_y", bandwidth[1] * self.resolution_y)
         self.kde = kde
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -141,14 +134,14 @@ class Histogram2D(Diagnostic):
             hist = kde_histogram_2d(
                 x[:, self.axis[0]],
                 x[:, self.axis[1]],
-                bin_edges=self.bin_edges,
-                bandwidth=self.bandwidth,
+                bin_edges=[self.bin_edges_x, self.bin_edges_y],
+                bandwidth=[self.bandwidth_x, self.bandwidth_y],
             )
             return hist
         else:
             hist = torch.histogramdd(
                 x[:, self.axis],
-                bins=[self.bin_edges[i] for i in range(self.bin_edges.size(0))],
+                bins=[self.bin_edges_x, self.bin_edges_y],
                 density=True,
             )
             hist = hist.hist
