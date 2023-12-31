@@ -342,11 +342,11 @@ class MENT:
             # Append the measurement point to the integration points.
             for k, axis in enumerate(meas_axis):
                 if self.d_meas == 1:
-                    u[:, axis] = meas_point
+                    y[:, axis] = meas_point
                 else:
-                    u[:, axis] = meas_point[k]
+                    y[:, axis] = meas_point[k]
             # Compute the probability density at the integration points.
-            x, ladj = transform.inverse_and_ladj(u)
+            x, ladj = transform.inverse_and_ladj(y)
             log_prob = self.log_prob(x) + ladj  # check sign
             prob = torch.exp(log_prob)
             # Sum over the integration points.
