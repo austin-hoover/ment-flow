@@ -36,35 +36,10 @@ class Transform(nn.Module):
         x = self.inverse(y)
         ladj = -self.ladj(y, x)
         return (x, ladj)
-        
-        
-class Linear(Transform):
-    def __init__(self, matrix: torch.Tensor) -> None:
-        super().__init__()
-        self.set_matrix(matrix)
-
-    def set_matrix(self, matrix: torch.Tensor) -> None:
-        self.matrix = matrix
-        self.matrix_inv = torch.linalg.inv(self.matrix)
-        self.d = int(self.matrix.shape[0])
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return nn.functional.linear(x, self.matrix)
-
-    def inverse(self, y: torch.Tensor) -> torch.Tensor:
-        return nn.functional.linear(y, self.matrix_inv)
-
-    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return torch.zeros(x.shape[0])
-
-    def to(self, device):
-        self.matrix = self.matrix.to(device)
-        self.matrix_inv = self.matrix_inv.to(device)
-        return self    
 
 
 class CompositeTransform(Transform):
-    def __init__(self, transforms) -> None:
+    def __init__(self, *transforms) -> None:
         super().__init__()
         self.transforms = nn.Sequential(*transforms)
 
@@ -97,6 +72,45 @@ class CompositeTransform(Transform):
             transform.to(device)
         return self
 
+
+class Linear(Transform):
+    def __init__(self, matrix: torch.Tensor) -> None:
+        super().__init__()
+        self.set_matrix(matrix)
+
+    def set_matrix(self, matrix: torch.Tensor) -> None:
+        self.matrix = matrix
+        self.matrix_inv = torch.linalg.inv(self.matrix)
+        self.d = int(self.matrix.shape[0])
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return nn.functional.linear(x, self.matrix)
+
+    def inverse(self, y: torch.Tensor) -> torch.Tensor:
+        return nn.functional.linear(y, self.matrix_inv)
+
+    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(x.shape[0])
+
+    def to(self, device):
+        self.matrix = self.matrix.to(device)
+        self.matrix_inv = self.matrix_inv.to(device)
+        return self   
+
+
+class NonlinearTest(Transform):
+    # Tempory class to test nonlinearity.
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, x):
+        x[:, 0] = x[:, 0].clone() + 0.25 * x[:, 1].clone()**2
+        return x
+
+    def inverse(self, y):
+        y[:, 0] = y[:, 0].clone() - 0.25 * y[:, 1].clone()**2
+        return y
+        
 
 class Project1D(Transform):
     def __init__(self, v: torch.Tensor):
