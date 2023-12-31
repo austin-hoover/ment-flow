@@ -19,7 +19,7 @@ class Diagnostic(torch.nn.Module):
 
 
 class Histogram1D(Diagnostic):
-    """One-dimensional histogram diagnostic."""
+    """One-dimensional histogram."""
     def __init__(
         self,
         axis: int,
@@ -76,7 +76,7 @@ class Histogram1D(Diagnostic):
             
 
 class Histogram2D(Diagnostic):
-    """Two-dimensional histogram diagnostic."""
+    """Two-dimensional histogram."""
     def __init__(
         self,
         axis: Iterable[int],
@@ -154,4 +154,14 @@ class Histogram2D(Diagnostic):
             hist = hist.hist
             return hist
 
-        
+
+class Projection(Diagnostic):
+    """Projects points onto axis (no density estimation)."""
+    def __init__(self, axis=0, **kws) -> None:
+        super().__init__(**kws)
+        self.axis = axis
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x[:, self.axis]
+
+
