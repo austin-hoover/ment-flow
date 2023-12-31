@@ -101,20 +101,17 @@ class Histogram2D(Diagnostic):
         super().__init__(**kws)
         self.axis = axis
         self.shape = tuple([(len(e) - 1) for e in bin_edges])
-        self.register_buffer("bin_edges_x", bin_edges[0])
-        self.register_buffer("bin_edges_y", bin_edges[1])
-        self.register_buffer("bin_coords_x", centers_from_edges(bin_edges[0]))
-        self.register_buffer("bin_coords_y", centers_from_edges(bin_edges[1]))
-        self.register_buffer("resolution_x", self.bin_edges_x[1] - self.bin_edges_x[0])
-        self.register_buffer("resolution_y", self.bin_edges_y[1] - self.bin_edges_y[0])
+        self.bin_edges = bin_edges
+        self.bin_coords = [centers_from_edges(e) for e in bin_edges]
+        self.resolution = [e[1] - e[0] for e in bin_edges]
 
         d = len(axis)
-        if bandwidth is None:
-            bandwidth = d * [1.0]
-        if type(bandwidth) in [float, int]:
-            bandwidth = d * [bandwidth]
-        self.register_buffer("bandwidth_x", bandwidth[0] * self.resolution_x)
-        self.register_buffer("bandwidth_y", bandwidth[1] * self.resolution_y)
+        self.bandwidth = bandwidth
+        if self.bandwidth  is None:
+            self.bandwidth  = d * [1.0]
+        if type(self.bandwidth ) in [float, int]:
+            self.bandwidth  = d * [self.bandwidth ]
+        self.bandwidth = [self.bandwidth [i] * self.resolution[i] for i in range(d)]
         self.kde = kde
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -134,14 +131,14 @@ class Histogram2D(Diagnostic):
             hist = kde_histogram_2d(
                 x[:, self.axis[0]],
                 x[:, self.axis[1]],
-                bin_edges=[self.bin_edges_x, self.bin_edges_y],
-                bandwidth=[self.bandwidth_x, self.bandwidth_y],
+                bin_edges=self.bin_edges,
+                bandwidth=self.bandwidth,
             )
             return hist
         else:
             hist = torch.histogramdd(
                 x[:, self.axis],
-                bins=[self.bin_edges_x, self.bin_edges_y],
+                bins=self.bin_edges,
                 density=True,
             )
             hist = hist.hist

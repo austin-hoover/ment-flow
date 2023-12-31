@@ -5,7 +5,6 @@ References
 [1] https://doi.org/10.1109/78.80970
 [2] https://doi.org/10.1103/PhysRevAccelBeams.25.042801
 """
-
 import abc
 import math
 import time
