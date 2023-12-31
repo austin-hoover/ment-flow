@@ -164,7 +164,7 @@ class Monitor:
             info[f"D_{i:02.0f}"] = float(D[i])
         self.logger.write(info)
 
-        message = "epoch={:02.0f} iter={:05.0f} t={:0.2f} L={:0.2e} H={:0.2e} C={:0.2e} lr={} batch={:0.2e}".format(
+        message = "epoch={:02.0f} iter={:05.0f} t={:0.2f} L={:0.2e} H={:0.2e} D={:0.2e} lr={} batch={:0.2e}".format(
             epoch,
             iteration,
             time_ellapsed,
@@ -233,13 +233,13 @@ class Trainer:
         print(f"Saving file {filename}")
         self.model.save(filename)
 
-    def make_and_save_plots(self, epoch: int, iteration: int, save=False, **savefig_kws) -> None:
+    def make_and_save_plots(self, epoch: int, iteration: int, **savefig_kws) -> None:
         if self.plotter is None:
             return
         ext = savefig_kws.pop("ext", "png")
         figures = self.plotter(self.model)
         for index, figure in enumerate(figures):
-            if save:
+            if self.save:
                 filename = f"fig_{index:02.0f}_{self.get_prefix(epoch, iteration)}.{ext}"
                 filename = os.path.join(self.fig_dir, filename)
                 print(f"Saving file {filename}")
@@ -305,8 +305,6 @@ class Trainer:
             Steps the penalty parameter.
         penalty_max : float
             Maximum penalty parameter value.
-        save : bool
-            Whether to save plots and checkpoints.
         vis_freq : int
             Visualization frequency.  Defaults to `iterations` (saves after each epoch).
         checkpoint_freq : int
@@ -363,7 +361,7 @@ class Trainer:
                     self.model.train()
     
                 if ((iteration + 1) % checkpoint_freq == 0) or ((iteration + 1) == iterations):
-                    if save:
+                    if self.save:
                         curr_state_dict = self.model.state_dict()
                         self.model.load_state_dict(self.monitor.best_state_dict)
                         filename = f"model_{self.get_prefix(epoch=epoch, iteration=iteration)}.pt"
@@ -380,6 +378,9 @@ class Trainer:
         # Outer loop: Penalty Method (PM).
         
         D_norm_old = float("inf")
+        converged = False
+        converged_message = ""
+        final_epoch = False
         
         for epoch in range(epochs):
             print("epoch={}".format(epoch))
@@ -389,26 +390,33 @@ class Trainer:
             
             D_norm = self.monitor.meters["D_norm"].avg  
             
-            print("D_norm={}".format(D_norm))
-            print("D_norm_old={}".format(D_norm_old))
-            print("frac={}".format(D_norm / D_norm_old))
-            print("diff={}".format(D_norm - D_norm_old))
+            print(f"D_norm={:0.3e}".format(D_norm))
+            print(f"D_norm_old={:0.3e}".format(D_norm_old))
+            print(f"frac={:0.3e}".format(D_norm / D_norm_old))
+            print(f"diff={:0.3e}".format(D_norm - D_norm_old))
 
-            converged = False
             if D_norm > (1.0 - rtol) * D_norm_old:
-                print("CONVERGED (rtol)")
-                return
+                converged = True
+                converged_message = "CONVERGED (rtol)"
             if D_norm_old - D_norm < atol:
-                print("CONVERGED (atol)")
-                return
+                converged = True
+                converged_message = "CONVERGED (atol)"
             if D_norm <= dmax:
-                print("CONVERGED (dmax)")
-                return 
+                converged = True
+                converged_message = "CONVERGED (dmax)"
 
-            self.model.penalty_parameter *= penalty_scale
-            self.model.penalty_parameter += penalty_step
-            if self.model.penalty_parameter >= penalty_max:
-                print("Max penalty parameter reached.")
-                return
-            
+            if converged:
+                if final_epoch:
+                    return
+                print(converged_message)
+                print("Training one more epoch with 0.95 * penalty parameter")
+                self.model.penalty_parameter *= 0.95
+            else:
+                self.model.penalty_parameter *= penalty_scale
+                self.model.penalty_parameter += penalty_step
+                if self.model.penalty_parameter >= penalty_max:
+                    print("Max penalty parameter reached.")
+                    return   
+                
+            final_epoch = converged
             D_norm_old = D_norm
