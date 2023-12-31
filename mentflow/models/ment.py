@@ -81,7 +81,6 @@ def interpolate_dd(
 
 class GaussianPrior:
     """Gaussian prior distribution."""
-
     def __init__(self, d=2, scale=1.0, device=None):
         mean = torch.zeros(d)
         mean = mean.type(torch.float32)
@@ -101,7 +100,6 @@ class GaussianPrior:
 
 class UniformPrior:
     """Uniform prior distribution."""
-
     def __init__(self, d=2, scale=10.0, device=None):
         self.scale = scale
         self.d = d
@@ -154,8 +152,8 @@ class MENT:
     Attributes
     ----------
     lagrange_functions : list[tensor]
-        Lagrange functions ("h functions", "component functions") {h_i(u_i)} evaluated
-        at each point on the the measurement axes u_i. We can treat them as continuous
+        Lagrange functions ("h functions", "component functions") {h_i(y_i)} evaluated
+        at each point on the the measurement axes y_i. We can treat them as continuous
         functions by interpolating between the points.
     d_meas : int
         Dimension of measurement axis. (d_meas < d)
@@ -244,12 +242,12 @@ class MENT:
             self.lagrange_functions.append((measurement > 0.0).float())
         return self.lagrange_functions
 
-    def evaluate_lagrange_function(self, index: int, u: torch.Tensor) -> torch.Tensor:
+    def evaluate_lagrange_function(self, index: int, y: torch.Tensor) -> torch.Tensor:
         """Evaluate lagrange function h(u) at transformed points u."""
         points = self.meas_points
         values = self.lagrange_functions[index].ravel()
         values = self.send(values)
-        int_points = u[:, self.meas_axis]
+        int_points = y[:, self.meas_axis]
         int_values = interpolate_dd(points, values, int_points, method=self.interpolate)
         int_values = torch.clamp(int_values, 0.0, None)
         int_values = self.send(int_values)
@@ -260,9 +258,9 @@ class MENT:
         log_prob = torch.ones(len(x))
         log_prob = self.send(log_prob)
         for i, transform in enumerate(self.transforms):
-            u = transform(x)
-            h_u = self.evaluate_lagrange_function(i, u)
-            log_prob += torch.log(h_u + 1.00e-12)
+            y = transform(x)
+            h = self.evaluate_lagrange_function(i, y)
+            log_prob += torch.log(h + 1.00e-12)
         log_prob += self.prior.log_prob(x)
         return log_prob
 
@@ -330,12 +328,12 @@ class MENT:
         int_points = self.send(int_points)
 
         # Initialize transformed coordinate vector u.
-        u = torch.zeros((int_points.shape[0], self.d))
+        y = torch.zeros((int_points.shape[0], self.d))
         for k, axis in enumerate(int_axis):
             if len(int_axis) == 1:
-                u[:, axis] = int_points
+                y[:, axis] = int_points
             else:
-                u[:, axis] = int_points[:, k]
+                y[:, axis] = int_points[:, k]
 
         # Integrate
         prediction = torch.zeros(meas_points.shape[0])
@@ -349,10 +347,10 @@ class MENT:
                     u[:, axis] = meas_point[k]
             # Compute the probability density at the integration points.
             x, ladj = transform.inverse_and_ladj(u)
-            log_prob_u = self.log_prob(x) + ladj  # check sign
-            prob_u = torch.exp(log_prob_u)
+            log_prob = self.log_prob(x) + ladj  # check sign
+            prob = torch.exp(log_prob)
             # Sum over the integration points.
-            prediction[i] = torch.sum(prob_u)
+            prediction[i] = torch.sum(prob)
             
         # Reshape and normalize the projection.
         if self.d_meas > 1:
