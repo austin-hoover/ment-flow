@@ -105,7 +105,7 @@ class Histogram2D(Diagnostic):
         self.bin_coords = [centers_from_edges(e) for e in bin_edges]
         self.resolution = [e[1] - e[0] for e in bin_edges]
 
-        d = len(axis)
+        self.d = d = len(axis)
         self.bandwidth = bandwidth
         if self.bandwidth  is None:
             self.bandwidth  = d * [1.0]
@@ -143,6 +143,12 @@ class Histogram2D(Diagnostic):
             )
             hist = hist.hist
             return hist
+
+    def to(self, device):
+        for i in range(self.d):
+            self.bin_edges[i] = self.bin_edges[i].to(device)
+            self.bin_coords[i] = self.bin_coords[i].to(device)
+        return self
 
 
 class Projection(Diagnostic):
