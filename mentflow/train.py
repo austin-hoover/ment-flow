@@ -129,13 +129,13 @@ class Monitor:
         batch_size: int
     ) -> None:
         """Update history array."""
-        if (iteration + 1) % self.freq != 0:
-            return
-            
         if self.start_time is None:
             self.start_time = time.time()
         time_ellapsed = time.time() - self.start_time
 
+        if (iteration + 1) % self.freq != 0:
+            return
+            
         lr = self.optimizer.param_groups[0]["lr"]
 
         self.meters["L"].action(float(L))
