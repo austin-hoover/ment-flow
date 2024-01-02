@@ -2,6 +2,12 @@
 
 See the bmad-x repository for beam physics modeling capabilities.
 (https://github.com/bmad-sim/Bmad-X)
+
+
+To do
+-----
+We probably don't need inverse methods since we're dealing with Hamiltonian
+systems. We can reverse the simulation by flipping the particle momenta.
 """
 import math
 import typing
@@ -96,7 +102,7 @@ class Linear(Transform):
         self.matrix = self.matrix.to(device)
         self.matrix_inv = self.matrix_inv.to(device)
         return self   
-
+        
 
 class NonlinearTest(Transform):
     # Tempory class to test nonlinearity.
