@@ -412,22 +412,27 @@ class MENT:
         _function = _functions[method]
         return _function(index=index, **kws)
         
-    def gauss_seidel_iterate(self, **kws) -> None:
+    def gauss_seidel_iterate(self, omega=1.0, sim_method="integrate", **sim_method_kws) -> None:
         """Execute Gauss-Seidel iteration to update lagrange functions.
 
         Parameters
         ----------
+        omega : float
+            Under-relaxation parameter in range (0, 1). 
+            h -> h * (1 + omega * ((g / g*) - 1))
+        sim_method : str
+            Simulation method {"integrate", "sample"}.
         **kwargs
             Key word arguments passed to `self._simulate`.
         """
         for index, measurement in enumerate(self.measurements):
-            prediction = self._simulate(index=index, **kws)
+            prediction = self._simulate(index=index, method=sim_method, **sim_method_kws)
             shape = self.lagrange_functions[index].shape
             lagrange_function = self.lagrange_functions[index]
             lagrange_function = lagrange_function.ravel()
-            for j, (g_meas, g_pred) in enumerate(zip(measurement.ravel(), prediction.ravel())):
+            for j, (g_meas, g_pred) in enumerate(zip(measurement.ravel(), prediction.ravel())):                
                 if (g_meas != 0.0) and (g_pred != 0.0):
-                    lagrange_function[j] *= g_meas / g_pred
+                    lagrange_function[j] *= (1.0 + omega * ((g_meas / g_pred) - 1.0))
             lagrange_function = lagrange_function.reshape(shape)
             self.lagrange_functions[index] = lagrange_function
         self.iteration += 1
