@@ -408,8 +408,7 @@ class Trainer:
                 if final_epoch:
                     return
                 print(converged_message)
-                print("Training one more epoch with 0.95 * penalty parameter")
-                self.model.penalty_parameter *= 0.95
+                print("Training one more epoch with same penalty parameter")
             else:
                 self.model.penalty_parameter *= penalty_scale
                 self.model.penalty_parameter += penalty_step
