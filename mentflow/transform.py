@@ -2,12 +2,6 @@
 
 See the bmad-x repository for beam physics modeling capabilities.
 (https://github.com/bmad-sim/Bmad-X)
-
-
-To do
------
-We probably don't need inverse methods since we're dealing with Hamiltonian
-systems. We can reverse the simulation by flipping the particle momenta.
 """
 import math
 import typing
@@ -44,7 +38,24 @@ class Transform(nn.Module):
         return (x, ladj)
 
 
-class CompositeTransform(Transform):
+class SymplecticTransform(Transform):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def inverse(self, y: torch.Tensor):
+        x = y.clone()  # better way to do this?
+        for i in range(0, x.shape[1], 2):
+            x[:, i + 1] *= -1.0
+        x = self.forward(x)
+        for i in range(0, x.shape[1], 2):
+            x[:, i + 1] *= -1.0
+        return x
+
+    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(x.shape[0])
+
+
+class CompositeTransform(nn.Module):
     def __init__(self, *transforms) -> None:
         super().__init__()
         self.transforms = nn.Sequential(*transforms)
@@ -79,52 +90,39 @@ class CompositeTransform(Transform):
         return self
 
 
-class Linear(Transform):
+class LinearTransform(SymplecticTransform):
     def __init__(self, matrix: torch.Tensor) -> None:
         super().__init__()
-        self.set_matrix(matrix)
+        self.matrix = matrix
 
     def set_matrix(self, matrix: torch.Tensor) -> None:
         self.matrix = matrix
-        self.matrix_inv = torch.linalg.inv(self.matrix)
-        self.d = int(self.matrix.shape[0])
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return nn.functional.linear(x, self.matrix)
-
-    def inverse(self, y: torch.Tensor) -> torch.Tensor:
-        return nn.functional.linear(y, self.matrix_inv)
-
-    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return torch.zeros(x.shape[0])
-
+    
     def to(self, device):
         self.matrix = self.matrix.to(device)
-        self.matrix_inv = self.matrix_inv.to(device)
-        return self   
-        
+        return self
 
-class NonlinearTest(Transform):
-    # Tempory class to test nonlinearity.
+
+class QuadrupoleTransform(SymplecticTransform):
     def __init__(self):
-        super().__init__()
-        
-    def forward(self, x):
-        x[:, 0] = x[:, 0].clone() + 0.25 * x[:, 1].clone()**2
-        return x
-
-    def inverse(self, y):
-        y[:, 0] = y[:, 0].clone() - 0.25 * y[:, 1].clone()**2
-        return y
+        raise NotImplementedError
         
 
-class Project1D(Transform):
-    def __init__(self, v: torch.Tensor):
+class MultipoleTransform(SymplecticTransform):
+    def __init__(self):
+        raise NotImplementedError
+
+
+class ProjectionTransform1D(Transform):
+    def __init__(self, vector: torch.Tensor):
         super().__init__()
-        self.v = v / torch.norm(v)
+        self.vector = vector / torch.norm(vector)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.sum(x * self.v, dim=1)[:, None]
+        return torch.sum(x * self.vector, dim=1)[:, None]
         
 
 def rotation_matrix(angle):
