@@ -46,7 +46,7 @@ def plot_proj_1d(
     colors=None,
     ymax=1.25,
     **kws
-):
+):    
     if colors is None:
         colors = ["black", "red"]
     ncols = min(len(measurements), maxcols)

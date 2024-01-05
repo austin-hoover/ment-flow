@@ -133,7 +133,7 @@ class Monitor:
             self.start_time = time.time()
         time_ellapsed = time.time() - self.start_time
 
-        if (iteration + 1) % self.freq != 0:
+        if (iteration % self.freq != 0):
             return
             
         lr = self.optimizer.param_groups[0]["lr"]
@@ -185,7 +185,12 @@ class Monitor:
 
 
 class Trainer:
-    """"Trainer for MENT-Flow model."""
+    """"Trainer for MENT-Flow model.
+
+    TO-DO:
+    * Do not use exponential average when computing D_avg after each epoch, 
+      or decrease me
+    """
     def __init__(
         self,
         model: MENTFlow,
@@ -236,13 +241,13 @@ class Trainer:
         if self.plotter is None:
             return
         ext = savefig_kws.pop("ext", "png")
-        figures = self.plotter(self.model)
-        for index, figure in enumerate(figures):
+        figs = self.plotter(self.model)
+        for index, fig in enumerate(figs):
             if self.save:
                 filename = f"fig_{index:02.0f}_{self.get_prefix(epoch, iteration)}.{ext}"
                 filename = os.path.join(self.fig_dir, filename)
                 print(f"Saving file {filename}")
-                figure.savefig(filename, **savefig_kws)
+                fig.savefig(filename, **savefig_kws)
             else:
                 plt.show()
             plt.close("all")
@@ -382,13 +387,26 @@ class Trainer:
         final_epoch = False
         
         for epoch in range(epochs):
+            # Print update statement
             print("epoch={}".format(epoch))
             print("mu={}".format(self.model.penalty_parameter))
 
+            # Solve the subproblem for fixed penalty parameter.
             train_epoch(epoch)
-            
-            D_norm = self.monitor.meters["D_norm"].avg  
-            
+
+            # Load the best state dict from this subproblem and compute the 
+            # discrepancy with 100,000 particles.
+            with torch.no_grad():
+                self.model.eval()
+                current_state_dict = self.model.state_dict()
+                self.model.load_state_dict(self.monitor.best_state_dict)
+                
+                loss, H, D = self.model.loss(batch_size=100000)
+                D_norm = float(sum(D)) / len(D)
+                
+                self.model.load_state_dict(current_state_dict)
+                self.model.train()
+                                        
             print("D_norm={:0.3e}".format(D_norm))
             print("D_norm_old={:0.3e}".format(D_norm_old))
             print("frac={:0.3e}".format(D_norm / D_norm_old))
@@ -406,6 +424,7 @@ class Trainer:
 
             if converged:
                 if final_epoch:
+                    self.model.load_state_dict(self.monitor.best_state_dict)
                     return
                 print(converged_message)
                 print("Training one more epoch with same penalty parameter")
@@ -418,3 +437,6 @@ class Trainer:
                 
             final_epoch = converged
             D_norm_old = D_norm
+
+        self.self.model.load_state_dict(self.monitor.best_state_dict)
+        return

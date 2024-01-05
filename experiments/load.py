@@ -45,7 +45,7 @@ def make_generator_zuko(cfg):
         transforms=cfg["generator"]["transforms"],
         bins=cfg["generator"]["spline_bins"],
         hidden_features=(cfg["generator"]["hidden_layers"] * [cfg["generator"]["hidden_units"]]),
-        randperm=cfg["generator"]["randperm"],
+        randperm=True,
     )
     flow = zuko.flows.Flow(flow.transform.inv, flow.base)
     flow = mentflow.wrappers.WrappedZukoFlow(flow)
