@@ -21,6 +21,7 @@ import numpy as np
 import scipy.interpolate
 import torch
 
+from mentflow.loss import get_loss_function
 from mentflow.sample import GridSampler
 from mentflow.utils import get_grid_points_torch
 from mentflow.utils import grab
@@ -166,6 +167,7 @@ class MENT:
         transforms: List[Callable],
         diagnostics: List[Callable],
         measurements: List[List[torch.Tensor]],
+        discrepancy_function: str = "kld",
         prior: Any = None,
         interpolate: str = "linear",
         sampler: Optional[Callable] = None,
@@ -184,6 +186,7 @@ class MENT:
         self.transforms = transforms
         self.diagnostics = self.set_diagnostics(diagnostics)
         self.measurements = self.set_measurements(measurements)
+        self.discrepancy_function = get_loss_function(discrepancy_function)
 
         self.prior = prior
         if self.prior is None:
@@ -296,6 +299,14 @@ class MENT:
         x = self.sample(n)
         log_prob = self.log_prob(x)
         return (x, log_prob)
+
+    def discrepancy(self, predictions) -> List[torch.Tensor]:
+        """Compute simulation-measurement discrepancy vector."""
+        discrepancy_vector = []
+        for prediction, measurement in zip(unravel(predictions), unravel(self.measurements)):
+            discrepancy = self.discrepancy_function(prediction, measurement)
+            discrepancy_vector.append(discrepancy)
+        return discrepancy_vector
 
     def _simulate_integrate(
         self, 
