@@ -2,7 +2,7 @@
 
 Maximum-entropy tomography (MENT) using normalizing flows.
 
-This repo is under development and may be replaced in the future.
+This repo is under development.
 
 
 ## Installation
