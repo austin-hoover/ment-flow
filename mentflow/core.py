@@ -86,7 +86,7 @@ class MENTFlow(Model, nn.Module):
 
         Parameters
         ----------
-        predictions : list[tensor], shape (n_meas * n_diag,)
+        predictions : list[tensor], shape (n_meas, n_diag)
             Predictions.
 
         Returns
@@ -199,10 +199,25 @@ class MENTFlow(Model, nn.Module):
         return self
 
 
-def simulate(x, transforms, diagnostics):
+def simulate(x, transforms, diagnostics):        
     predictions = []
     for transform in transforms:
         x_out = transform(x)
         predictions.append([diagnostic(x_out) for diagnostic in diagnostics])
     return predictions
+
+
+def simulate_nokde(x, transforms, diagnostics):
+    settings = []
+    for diagnostic in diagnostics:
+        settings.append(diagnostic.kde)
+        diagnostic.kde = False
+        
+    predictions = simulate(x, transforms, diagnostics)
+
+    for setting, diagnostic in zip(settings, diagnostics):
+        diagnostic.kde = setting
+
+    return predictions
+    
 
