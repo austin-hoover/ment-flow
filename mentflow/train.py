@@ -18,54 +18,66 @@ import matplotlib.pyplot as plt
 import numpy as np
 import proplot as pplt
 import torch
+from tqdm.notebook import tqdm as tqdm_nb
+from tqdm import tqdm
 
 from mentflow.core import MENTFlow
 
 from mentflow.diagnostics import Histogram1D
 from mentflow.diagnostics import kde_histogram_1d
 
+from mentflow.utils import save_pickle
 from mentflow.utils import unravel
 from mentflow.utils.logging import ListLogger
 
 
-class RunningAverageMeter():
-    """Computes the exponential moving average."""
-    def __init__(self, momentum=0.99):
-        self.momentum = momentum
-        self.reset()
-
-    def reset(self):
-        self.val = None
-        self.avg = 0
-        self.sum = 0
-        self.min_avg = float("inf")
-        self.n_bad = 0
-
-    def action(self, val):
-        if self.val is None:
-            self.avg = val
-        else:
-            self.avg = self.avg * self.momentum + val * (1.0 - self.momentum)
-        self.sum += val
-        self.val = val
-        if self.avg < self.min_avg:
-            self.min_avg = self.avg
-            self.n_bad = 0
-        else:
-            self.n_bad += 1
-
-
 class ScriptManager:
-    """Helps setup paths, logger, etc."""
-    def __init__(self, filepath: str, outdir : str) -> None:
+    """Helps setup paths, logger, etc.
+
+    Parameters
+    ----------
+    file_path : str
+        Full path to the script file.
+    output_dir : str
+        Full path to output directory. The directory will be created if it does 
+        not exist. Files will be saved to /{output_dir}/{file_path.stem}/{timestamp}. 
+        Example:
+            - file_path = "/path/to/script_name.py"
+            - output_dir = "/path/to/output/"
+            - timestamp = "240104215723"
+            - output_dir --> "/path/to/output/script_name/240104215723/"
+    """
+    def __init__(self, file_path: str, output_dir : str) -> None:
         self.datestamp = time.strftime("%Y-%m-%d")
         self.timestamp = time.strftime("%y%m%d%H%M%S")
-        self.path = pathlib.Path(filepath)
-        self.outdir = os.path.join(outdir, self.timestamp)
-        if not os.path.isdir(self.outdir):
-            os.makedirs(self.outdir)
+        self.file_path = pathlib.Path(file_path)
+        self.output_dir = os.path.join(output_dir, self.file_path.stem, self.timestamp)
+        if not os.path.isdir(self.output_dir):
+            os.makedirs(self.output_dir)
+
+    def get_path(self, filename : str) -> str:
+        """Get full path to output file name."""
+        return os.path.join(self.output_dir, filename)
+
+    def make_dirs(self, *dir_names) -> None:
+        """Make directories in output folder."""
+        for dir_name in dir_names:
+            path = os.path.join(self.output_dir, dir_name)
+            if not os.path.exists(path):
+                os.makedirs(path)
+
+    def save_pickle(self, object, filename):
+        """Pickle object and save to output directory."""
+        return save_pickle(object, self.get_path(filename))
+
+    def save_script_copy(self):
+        """Save a copy of the script file to the output directory."""
+        old_path = str(self.file_path)
+        new_path = self.get_path(self.file_path.name)
+        shutil.copy(old_path, new_path)
 
     def get_logger(self, disp: bool = True, filename : str = "log.txt") -> logging.Logger:
+        """Return logger."""
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
         path = self.get_path(filename)
@@ -81,14 +93,32 @@ class ScriptManager:
             
         return logger
 
-    def get_path(self, filename : str) -> str:
-        return os.path.join(self.outdir, filename)
 
-    def make_dirs(self, *names) -> None:
-        for name in names:
-            path = os.path.join(self.outdir, name)
-            if not os.path.exists(path):
-                os.makedirs(path)
+class RunningAverageMeter():
+    """Computes the exponential moving average."""
+    def __init__(self, momentum=0.99):
+        self.momentum = momentum
+        self.reset()
+
+    def reset(self):
+        self.val = None
+        self.avg = 0
+        self.sum = 0
+        self.min_avg = float("inf")
+        self.n_bad = 0
+
+    def update(self, val):
+        if self.val is None:
+            self.avg = val
+        else:
+            self.avg = self.avg * self.momentum + val * (1.0 - self.momentum)
+        self.sum += val
+        self.val = val
+        if self.avg < self.min_avg:
+            self.min_avg = self.avg
+            self.n_bad = 0
+        else:
+            self.n_bad += 1
 
 
 class Monitor:
@@ -98,28 +128,40 @@ class Monitor:
         model: MENTFlow, 
         optimizer: Optional[torch.optim.Optimizer] = None, 
         lr_scheduler: Optional[Any] = None,
-        momentum: Optional[float] = 0.95,
+        momentum: Optional[float] = 0.85,
         path: Optional[str] = None,
-        freq : int = 1,
+        notebook: bool = False
     ) -> None:
-        self.path = path
-        self.logger = ListLogger(save=(path is not None), path=path, freq=freq)
+        """Constructor."""
+        self.logger = ListLogger(save=(path is not None), path=path, freq=1)
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.path = path
+
         self.meters = {
             "L": RunningAverageMeter(momentum=momentum),
             "H": RunningAverageMeter(momentum=momentum),
             "D": [RunningAverageMeter(momentum=momentum) for _ in unravel(self.model.measurements)],
             "D_norm": RunningAverageMeter(momentum=momentum),
         }
+
+        self.progress_bar = None
+        self.notebook = notebook
                 
         self.start_time = None
         self.best_loss = float("inf")
         self.best_state_dict = model.state_dict()
-        self.freq = freq
 
-    def action(
+    def set_progress_bar(self, iterations: int):
+        self.progress_bar = None
+        if self.notebook:
+            self.progress_bar = tqdm_nb(total=iterations)
+        else:
+            self.progress_bar = tqdm(total=iterations)
+        return self.progress_bar
+
+    def update(
         self, 
         epoch : int, 
         iteration : int, 
@@ -128,95 +170,91 @@ class Monitor:
         D: List[float], 
         batch_size: int
     ) -> None:
-        """Update history array."""
+
+        # Update time ellapsed.
         if self.start_time is None:
             self.start_time = time.time()
         time_ellapsed = time.time() - self.start_time
 
-        if (iteration % self.freq != 0):
-            return
-            
+        # Get learning rate.
         lr = self.optimizer.param_groups[0]["lr"]
 
-        self.meters["L"].action(float(L))
-        self.meters["H"].action(float(H))
+        # Update average meters.
+        self.meters["L"].update(float(L))
+        self.meters["H"].update(float(H))
         for i in range(len(D)):
-            self.meters["D"][i].action(float(D[i]))
-        D_norm = sum(abs(float(D[i])) for i in range(len(D))) / len(D)
-        self.meters["D_norm"].action(D_norm)
+            self.meters["D"][i].update(float(D[i]))
+        D_norm = float(sum(D)) / len(D)
+        self.meters["D_norm"].update(D_norm)
 
+        # Update best state dict.
         if L < self.best_loss:
             self.best_loss = L
             self.best_state_dict = copy.deepcopy(self.model.state_dict())
 
+        # Write line to output file.
         info = dict()
+        info["time"] = time_ellapsed
         info["epoch"] = epoch
         info["iteration"] = iteration
-        info["t"] = time_ellapsed
+        info["learning_rate"] = lr
         info["batch_size"] = batch_size
-        info["lr"] = lr
+        info["penalty"] = self.model.penalty_parameter
         info["L"] = float(L)
         info["H"] = float(H)
         info["D_norm"] = float(D_norm)
-        info["mu"] = self.model.penalty_parameter
         for i in range(len(D)):
             info[f"D_{i:02.0f}"] = float(D[i])
         self.logger.write(info)
 
-        message = "epoch={:02.0f} iter={:05.0f} t={:0.2f} L={:0.2e} H={:0.2e} D={:0.2e} lr={} batch={:0.2e}".format(
-            epoch,
-            iteration,
-            time_ellapsed,
-            float(L),
-            float(H),
-            float(D_norm),
-            lr,
-            batch_size,
+        # Update progress bar.
+        description = (
+            "L={:0.2e}".format(info["L"]),
+            "H={:0.2e}".format(info["H"]),
+            "|D|={:0.2e}".format(info["D_norm"]),
+            "lr={:0.2e}".format(info["learning_rate"]),
+            "n={:0.2e}".format(info["batch_size"]),
         )
-        print(message)
+        description = " ".join(description)
+        self.progress_bar.set_description(description)
+        self.progress_bar.update()
+
+        return info
 
     def reset(self) -> None:
+        self.best_loss = float("inf")
         self.meters["L"].reset()
         self.meters["H"].reset()
         self.meters["D_norm"].reset()
         for i in range(len(self.meters["D"])):
             self.meters["D"][i].reset()
-        self.best_loss = float("inf")
 
 
 class Trainer:
-    """"Trainer for MENT-Flow model.
-
-    TO-DO:
-    * Do not use exponential average when computing D_avg after each epoch, 
-      or decrease me
-    """
+    """"MENT-Flow model trainer."""
     def __init__(
         self,
         model: MENTFlow,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: Any,
-        monitor: Monitor,
-        plotter: Callable[[MENTFlow], List[plt.Figure]],
-        save: bool = True,
-        output_dir: Optional[str] = None,
+        plotter=None,
+        evaluator=None,
+        output_dir=None,
         precision=torch.float32,
         device=None,
+        notebook=False,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
-        self.monitor = monitor
-        self.plotter = plotter
-        self.device = device
-        self.precision = precision
-        self.save = save
         
-        self.monitor.optimizer = optimizer
-        self.monitor.lr_scheduler = lr_scheduler        
+        self.precision = precision
+        self.device = device
+        self.notebook = notebook
 
-        if self.save:
-            self.output_dir = output_dir
+        # Make output directories.
+        self.output_dir = output_dir
+        if self.output_dir is not None:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
     
@@ -228,29 +266,63 @@ class Trainer:
             if not os.path.exists(self.checkpoint_dir):
                 os.makedirs(self.checkpoint_dir)
 
-    def get_prefix(self, epoch: int, iteration: int) -> str:
-        return f"{epoch:03.0f}_{iteration:05.0f}"
+        # Setup monitors.
+        path = None
+        if self.output_dir is not None:
+            path = os.path.join(self.output_dir, "history.pkl")
+            
+        self.monitor = Monitor(
+            model=model,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+            momentum=0.85,
+            path=path,
+            notebook=notebook,
+        )
+        self.plotter = plotter
+        self.evaluator = evaluator
 
-    def save_checkpoint(self, epoch: int, iteration: int) -> None:
-        filename = f"model_{self.get_prefix(epoch, iteration)}.pt"
+    def _get_filename(self, filename: str, epoch: int, iteration: int, ext: str = None) -> str:
+        filename = f"{filename}_{epoch:03.0f}_{iteration:05.0f}"
+        if ext is not None:
+            filename = f"{filename}.{ext}"
+        return filename
+
+    def save_checkpoint(self, epoch: int, iteration: int, state_dict=None) -> None:
+        curr_state_dict = self.model.state_dict()
+        if state_dict is not None:
+            self.model.load_state_dict(state_dict)
+
+        filename = self._get_filename("model", epoch, iteration, ext="pt")
         filename = os.path.join(self.checkpoint_dir, filename)
         print(f"Saving file {filename}")
         self.model.save(filename)
 
-    def make_and_save_plots(self, epoch: int, iteration: int, **savefig_kws) -> None:
+        if state_dict is not None:
+            self.model.load_state_dict(curr_state_dict)
+
+    def make_and_save_plots(self, epoch: int, iteration: int, state_dict=None, **savefig_kws) -> None:
         if self.plotter is None:
             return
+
+        curr_state_dict = self.model.state_dict()
+        if state_dict is not None:
+            self.model.load_state_dict(state_dict)
+
         ext = savefig_kws.pop("ext", "png")
         figs = self.plotter(self.model)
         for index, fig in enumerate(figs):
-            if self.save:
-                filename = f"fig_{index:02.0f}_{self.get_prefix(epoch, iteration)}.{ext}"
+            if self.output_dir is not None:
+                filename = self._get_filename(f"fig_{index:02.0f}", epoch, iteration, ext=ext)
                 filename = os.path.join(self.fig_dir, filename)
                 print(f"Saving file {filename}")
                 fig.savefig(filename, **savefig_kws)
-            else:
+            if self.notebook:
                 plt.show()
             plt.close("all")
+
+        if state_dict is not None:
+            self.model.load_state_dict(curr_state_dict)
 
     def train(
         self,
@@ -260,12 +332,11 @@ class Trainer:
         rtol: float = 0.05,
         atol: float = 0.0,
         dmax: float = 0.0,
-        penalty_step: float = 10.0,
-        penalty_scale: float = 1.0,
+        penalty_step: float = 20.0,
+        penalty_scale: float = 1.1,
         penalty_max: float = None,
-        save: bool = True,
-        vis_freq: int = 100,
-        checkpoint_freq: int = 100,
+        vis_freq: int = None,
+        eval_freq: int = None,
         savefig_kws: Optional[dict] = None,
     ) -> None:
         """Train using the Penalty Method (PM).
@@ -279,10 +350,10 @@ class Trainer:
         to avoid ill-conditioning. A reasonable choice is to converge in 10-20 epochs.
         
         The `dmax` parameter defines the convergence condition --- the maximum allowed L1 norm
-        of the discrepancy vector C, divided by the length of C. Training will cease as soon 
-        as |D| <= dmax * len(D). The ideal stopping point is usually clear from a plot of |C| 
+        of the discrepancy vector D, divided by the length of C. Training will cease as soon 
+        as |D| <= dmax * len(D). The ideal stopping point is usually clear from a plot of |D| 
         vs. iteration number. Eventually, large increases in H will be required for very 
-        small decreases in |C|; we want to stop before this occurs.
+        small decreases in |D|; we want to stop before this occurs.
         
         Eventually, an automated stopping condition based on the change in C and H may be
         implemented.
@@ -311,7 +382,7 @@ class Trainer:
             Maximum penalty parameter value.
         vis_freq : int
             Visualization frequency.  Defaults to `iterations` (saves after each epoch).
-        checkpoint_freq : int
+        eval_freq : int
             Checkpoint save frequency. Defaults to `iterations` (saves after each epoch).
         savefig_kws : dict
             Key word arguments for matplotlib.savefig. 
@@ -326,25 +397,27 @@ class Trainer:
         if not vis_freq:
             vis_freq = iterations
             
-        if not checkpoint_freq:
-            checkpoint_freq = iterations
+        if not eval_freq:
+            eval_freq = iterations
 
         
         def train_epoch(epoch):
             """Train one epoch (inner loop)."""
             self.monitor.reset()
-            for iteration in range(iterations):                
+            self.monitor.set_progress_bar(iterations)
+            
+            for iteration in range(iterations):   
                 self.optimizer.zero_grad()
                 loss, H, D = self.model.loss(batch_size)
     
-                self.monitor.action(
+                info = self.monitor.update(
                     epoch=epoch,
                     iteration=iteration,
                     L=loss,
                     H=H,
                     D=D,
                     batch_size=batch_size,
-                )
+                )                
                 
                 if not (torch.isinf(loss) or torch.isnan(loss)):
                     loss.backward()
@@ -353,45 +426,44 @@ class Trainer:
                 if ((iteration + 1) % vis_freq == 0) or ((iteration + 1) == iterations):
                     self.model.eval()
                     with torch.no_grad():
-                        curr_state_dict = self.model.state_dict()
-                        self.model.load_state_dict(self.monitor.best_state_dict)
                         self.make_and_save_plots(
-                            epoch=epoch,
-                            iteration=iteration,
-                            save=save,
+                            epoch,
+                            iteration,
+                            state_dict=self.monitor.best_state_dict,
                             **savefig_kws,
                         )
-                        self.model.load_state_dict(curr_state_dict)
                     self.model.train()
     
-                if ((iteration + 1) % checkpoint_freq == 0) or ((iteration + 1) == iterations):
-                    if self.save:
+                if ((iteration + 1) % eval_freq == 0) or ((iteration + 1) == iterations):
+                    self.model.eval()
+                    with torch.no_grad():
                         curr_state_dict = self.model.state_dict()
                         self.model.load_state_dict(self.monitor.best_state_dict)
-                        filename = f"model_{self.get_prefix(epoch=epoch, iteration=iteration)}.pt"
-                        self.model.save(os.path.join(self.checkpoint_dir, filename))
+                        if self.evaluator is not None:
+                            self.evaluator(self.model)
+                        self.save_checkpoint(epoch, iteration)
                         self.model.load_state_dict(curr_state_dict)
-
-                ## To do: compute T = 0.5 * | grad(D) / |grad(D)| - grad(D) / |grad(H)| |^2 = 0.
-                ## T = 0 when entropy is maximized.
-                # ...
+                    self.model.train()
         
                 self.lr_scheduler.step(loss.item())
 
+            self.monitor.progress_bar.close()
+
 
         # Outer loop: Penalty Method (PM).
+        # --------------------------------------------------------------------------
         
-        D_norm_old = float("inf")
         converged = False
         converged_message = ""
         final_epoch = False
+        D_norm_old = float("inf")
         
-        for epoch in range(epochs):
-            # Print update statement
-            print("epoch={}".format(epoch))
-            print("mu={}".format(self.model.penalty_parameter))
+        for epoch in range(epochs):            
+            # Print update statement.
+            print("epoch = {:}".format(epoch))
+            print("penalty = {:}".format(self.model.penalty_parameter))
 
-            # Solve the subproblem for fixed penalty parameter.
+            # Solve the current subproblem (fixed penalty parameter).
             train_epoch(epoch)
 
             # Load the best state dict from this subproblem and compute the 
@@ -406,22 +478,27 @@ class Trainer:
                 
                 self.model.load_state_dict(current_state_dict)
                 self.model.train()
-                                        
-            print("D_norm={:0.3e}".format(D_norm))
-            print("D_norm_old={:0.3e}".format(D_norm_old))
-            print("frac={:0.3e}".format(D_norm / D_norm_old))
-            print("diff={:0.3e}".format(D_norm - D_norm_old))
 
+            # Print change in data fit.
+            print("D_norm = {:0.3e}".format(D_norm))
+            print("D_norm_old = {:0.3e}".format(D_norm_old))
+            print("D_norm_abs_change = {:0.3e}".format(D_norm - D_norm_old))
+            print("D_norm_rel_change = {:0.3e}".format(D_norm / D_norm_old))
+            print()
+
+            # Check for convergence.
+            if D_norm <= dmax:
+                converged = True
+                converged_message = "CONVERGED (dmax)"
             if D_norm > (1.0 - rtol) * D_norm_old:
                 converged = True
                 converged_message = "CONVERGED (rtol)"
             if D_norm_old - D_norm < atol:
                 converged = True
                 converged_message = "CONVERGED (atol)"
-            if D_norm <= dmax:
-                converged = True
-                converged_message = "CONVERGED (dmax)"
 
+            # If converged, train one more epoch with the same penalty parameter. 
+            # Otherwise, increase the penalty parameter.
             if converged:
                 if final_epoch:
                     self.model.load_state_dict(self.monitor.best_state_dict)
@@ -434,9 +511,10 @@ class Trainer:
                 if self.model.penalty_parameter >= penalty_max:
                     print("Max penalty parameter reached.")
                     return   
-                
-            final_epoch = converged
-            D_norm_old = D_norm
 
-        self.self.model.load_state_dict(self.monitor.best_state_dict)
-        return
+            # Store variables for the next epoch.
+            final_epoch = converged
+            D_norm_old = D_norm            
+        
+        # Load the best state dict from the last epoch.
+        self.model.load_state_dict(self.monitor.best_state_dict)

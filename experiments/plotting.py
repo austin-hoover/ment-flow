@@ -2,6 +2,13 @@ import numpy as np
 import proplot as pplt
 
 
+def set_proplot_rc():
+    pplt.rc["cmap.discrete"] = False
+    pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
+    pplt.rc["cycle"] = "538"
+    pplt.rc["grid"] = False
+
+
 def plot_image(image, coords=None, ax=None, **kws):
     kws.setdefault("ec", "None")
     kws.setdefault("linewidth", 0.0)

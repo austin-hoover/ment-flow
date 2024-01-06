@@ -11,6 +11,7 @@ from experiments.plotting import plot_image
 from experiments.plotting import plot_hist
 from experiments.plotting import plot_points
 from experiments.plotting import plot_proj_1d as plot_proj
+from experiments.plotting import set_proplot_rc
 
 
 def plot_dist(x0, x, prob=None, coords=None, bins=75, limits=None, **kws):
@@ -44,6 +45,7 @@ def plot_model(
     """Plot model during training."""
     if sim_kws is None:
         sim_kws = dict()
+        
     if device is None:
         device = torch.device("cpu")
 
@@ -53,23 +55,22 @@ def plot_model(
     # Generate particles.
     x = model.sample(n)
     x = send(x)
-
     x_true = dist.sample(n)
     x_true = send(x_true)
 
     # Simulate measurements.
-    if type(model) is mf.models.ment.MENT:
+    if type(model) is mf.models.ment.MENT and "integrate" in sim_kws:
         predictions = model.simulate(**sim_kws)
     else:
-        kde = [diagnostic.kde for diagnostic in model.diagnostics]
-        
+        settings = []
         for diagnostic in model.diagnostics:
+            settings.append(diagnostic.kde)
             diagnostic.kde = False
     
-        predictions = model.simulate(x, **sim_kws)
+        predictions = model.simulate(x=x, **sim_kws)
     
-        for j, diagnostic in enumerate(model.diagnostics):
-            diagnostic.kde = kde[j]
+        for setting, diagnostic in zip(settings, model.diagnostics):
+            diagnostic.kde = setting
 
     
     figs = []

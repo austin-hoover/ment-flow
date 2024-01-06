@@ -13,7 +13,7 @@ import mentflow as mf
 import mentflow.wrappers
 
 
-def load_pickle(path):
+def load_pickle_safe(path):
     """Load pickled file; return None if file does not exist."""
     if os.path.exists(path):
         return mf.utils.load_pickle(path)
@@ -27,7 +27,7 @@ def get_epoch_and_iteration_number(checkpoint_filename):
     return epoch, iteration
 
 
-def make_generator_zuko(cfg):
+def make_generator_nsf(cfg):
     """Construct WrappedZukoFlow from config dict."""
 
     # Accept "features" or "output_features".
@@ -69,20 +69,20 @@ def make_generator_nn(cfg):
     return mf.models.NNGenerator(base, transformer)
 
 
-def make_generator(cfg, generator_type="zuko"):
-    """Constructe generative model from config dict."""
-    _make_generator_options = {
-        "zuko": make_generator_zuko,
+def make_generator(cfg, gen_model="nsf"):
+    """Construct generative model from config dict."""
+    _functions = {
+        "nsf": make_generator_nsf,
         "nn": make_generator_nn,
     }
-    _make_generator = _make_generator_options[generator_type]
-    return _make_generator(cfg)
-    
+    _function = _functions[gen_model]
+    return _function(cfg)
 
-def setup_model(cfg: dict, generator_type="zuko"):
+
+def setup_model(cfg: dict, gen_model="nsf"):
     """Set up MENT-Flow model architecture from config."""
     model = mf.MENTFlow(
-        generator=make_generator(cfg, generator_type),
+        generator=make_generator(cfg, gen_model),
         prior=None, 
         entropy_estimator=None,
         transforms=None,
@@ -92,21 +92,21 @@ def setup_model(cfg: dict, generator_type="zuko"):
     return model
 
 
-def load_model(cfg: dict, checkpoint_path: str, generator_type="zuko"):
+def load_model(cfg: dict, checkpoint_path: str, gen_model="nsf"):
     """Load MENT-Flow model architecture (from config) and parameters (from checkpoint)."""
-    model = setup_model(cfg, generator_type)
+    model = setup_model(cfg, gen_model)
     model.load(checkpoint_path)
     return model
 
 
-def load_run(folder, generator_type="zuko"):  
+def load_run(folder, gen_model="nsf"):  
     """Load all data from run."""
-    args    = load_pickle(os.path.join(folder, "args.pkl"))
-    cfg     = load_pickle(os.path.join(folder, "cfg.pkl"))
-    dist    = load_pickle(os.path.join(folder, "dist.pkl"))
-    history = load_pickle(os.path.join(folder, "history.pkl"))
+    args    = load_pickle_safe(os.path.join(folder, "args.pkl"))
+    cfg     = load_pickle_safe(os.path.join(folder, "cfg.pkl"))
+    dist    = load_pickle_safe(os.path.join(folder, "dist.pkl"))
+    history = load_pickle_safe(os.path.join(folder, "history.pkl"))
 
-    model = setup_model(cfg, generator_type)
+    model = setup_model(cfg, gen_model)
     model.eval()
     
     checkpoints = []
