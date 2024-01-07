@@ -10,10 +10,10 @@ import torch.nn as nn
 import zuko
 
 from mentflow.entropy import EntropyEstimator
+from mentflow.gen import GenModel
 from mentflow.loss import get_loss_function
 from mentflow.types_ import Model
 from mentflow.types_ import PriorDistribution
-from mentflow.types_ import TrainableDistribution
 from mentflow.utils import unravel
 
 
@@ -21,12 +21,12 @@ class MENTFlow(Model, nn.Module):
     """Flow-based maximum entropy tomography (MENT) solver."""
     def __init__(
         self,
-        generator: TrainableDistribution,
-        entropy_estimator: EntropyEstimator,
+        gen: GenModel,
         prior: Type[nn.Module],
         transforms: List[Type[nn.Module]],
         diagnostics: List[Type[nn.Module]],
         measurements: List[List[torch.Tensor]],
+        entropy_estimator: Optional[EntropyEstimator] = None,
         discrepancy_function: str = "kld",
         penalty_parameter: float = 10.0,
     ) -> None:
@@ -34,18 +34,19 @@ class MENTFlow(Model, nn.Module):
 
         Parameters
         ----------
-        generator : TrainableDistribution
-            A trainable model that generates samples and evalutes the probability density.
+        gen : GenModel
+            A trainable model that generates samples and (possibly) evalutes the probability 
+            density.
         entropy_estimator : EntropyEstimator
             Estimates entropy from samples and probability density.
         prior : Type[nn.Module]
             A prior distribution for relative entropy estimates. If None, use absolute entropy.
-        transforms : list[nn.Module], shape (n_meas,)
+        transforms : list[nn.Module]
             The ith transform is applied before the ith measurement.
         diagnostics : list[torch.nn.Module]
             Diagnostics used to measure the distribution after each transform. 
-        measurements : list[list[tensor], shape (len(diagnostics))], shape (len(transforms),)
-            The measurement data.
+        measurements : list[list[tensor], shape=len(diagnostics)], shape=len(transforms)
+            The measurement data for each transform and diagnostic.
         discrepancy_function : {"kld", "mae", "mse"}
             Function used to estimate discrepancy between simulated and measured projections.
             - "kld": KL divergence
@@ -55,7 +56,7 @@ class MENTFlow(Model, nn.Module):
             Loss = H + penalty_parameter * |D|.
         """
         super().__init__()
-        self.generator = generator
+        self.gen = gen
         self.entropy_estimator = entropy_estimator
         self.set_prior(prior)
         self.set_diagnostics(diagnostics)
@@ -102,19 +103,19 @@ class MENTFlow(Model, nn.Module):
 
     def sample(self, n: int) -> torch.Tensor:
         """Sample n points."""
-        return self.generator.sample(n)
+        return self.gen.sample(int(n))
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
         """Compute the log probability at x."""
-        return self.generator.log_prob(x)
+        return self.gen.log_prob(x)
 
     def sample_and_log_prob(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample n points and return the log probability at each point."""
-        raise self.generator.sample_and_log_prob(x)
+        raise self.gen.sample_and_log_prob(x)
 
     def sample_and_entropy(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample n points and estimate the entropy from the samples."""
-        x, log_prob = self.generator.sample_and_log_prob(n)
+        x, log_prob = self.gen.sample_and_log_prob(n)
         H = self.entropy_estimator(x, log_prob)
         return (x, H)
 
@@ -160,11 +161,11 @@ class MENTFlow(Model, nn.Module):
         return (L, H, D)
 
     def parameters(self) -> Iterator[nn.Parameter]:
-        return self.generator.parameters()
+        return self.gen.parameters()
     
     def save(self, path) -> None:
         state = {
-            "generator": self.generator.state_dict(),
+            "gen": self.gen.state_dict(),
             "entropy_estimator": self.entropy_estimator,
             "prior": self.prior,
             "transforms": self.transforms,
@@ -176,7 +177,7 @@ class MENTFlow(Model, nn.Module):
     def load(self, path, device) -> None:
         state = torch.load(path, map_location=device)
         try:
-            self.generator.load_state_dict(state["generator"])
+            self.gen.load_state_dict(state["gen"])
         except RuntimeError:
             raise RuntimeError("Error loading generative model. Architecture mismatch?")
 
@@ -194,9 +195,18 @@ class MENTFlow(Model, nn.Module):
         if len(self.diagnostics) > 0:
             for j in range(len(self.diagnostics)):
                 self.diagnostics[j] = self.diagnostics[j].to(device)
-        if self.generator is not None:
-            self.generator = self.generator.to(device)
+        if self.gen is not None:
+            self.gen = self.gen.to(device)
         return self
+
+    def has_log_prob(self, x=None):
+        if x is None:
+            x = torch.randn((2, self.d))
+        try:
+            self.log_prob(x)
+            return True
+        except NotImplementedError:
+            return False
 
 
 def simulate(x, transforms, diagnostics):        

@@ -7,7 +7,7 @@ import torch
 
 from mentflow.diagnostics.histogram import kde_histogram_1d
 from mentflow.diagnostics.histogram import kde_histogram_2d
-from mentflow.utils import centers_from_edges
+from mentflow.utils import coords_from_edges
 
 
 class Diagnostic(torch.nn.Module):
@@ -45,7 +45,7 @@ class Histogram1D(Diagnostic):
         self.axis = axis
         self.shape = len(bin_edges) - 1
         self.register_buffer("bin_edges", bin_edges)
-        self.register_buffer("bin_coords", centers_from_edges(self.bin_edges))
+        self.register_buffer("bin_coords", coords_from_edges(self.bin_edges))
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
         if bandwidth is None:
             bandwidth = 1.0
@@ -102,7 +102,7 @@ class Histogram2D(Diagnostic):
         self.axis = axis
         self.shape = tuple([(len(e) - 1) for e in bin_edges])
         self.bin_edges = bin_edges
-        self.bin_coords = [centers_from_edges(e) for e in bin_edges]
+        self.bin_coords = [coords_from_edges(e) for e in bin_edges]
         self.resolution = [e[1] - e[0] for e in bin_edges]
 
         self.d = d = len(axis)

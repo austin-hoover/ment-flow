@@ -10,7 +10,6 @@ import torch.nn as nn
 import zuko
 
 import mentflow as mf
-import mentflow.wrappers
 
 
 def load_pickle_safe(path):
@@ -27,62 +26,12 @@ def get_epoch_and_iteration_number(checkpoint_filename):
     return epoch, iteration
 
 
-def make_generator_nsf(cfg):
-    """Construct WrappedZukoFlow from config dict."""
-
-    # Accept "features" or "output_features".
-    features = None
-    if "features" in cfg["generator"]:
-        features = cfg["generator"]["features"]
-    elif "output_features" in cfg["generator"]:
-        features = cfg["generator"]["output_features"]
-    else:
-        raise ValueError("Need key 'features' or 'output_features'")
-
-    # Create Neural Spline Flow (NSF) model.
-    flow = zuko.flows.NSF(
-        features=features,
-        transforms=cfg["generator"]["transforms"],
-        bins=cfg["generator"]["spline_bins"],
-        hidden_features=(cfg["generator"]["hidden_layers"] * [cfg["generator"]["hidden_units"]]),
-        randperm=True,
-    )
-    flow = zuko.flows.Flow(flow.transform.inv, flow.base)
-    flow = mentflow.wrappers.WrappedZukoFlow(flow)
-    return flow
-
-
-def make_generator_nn(cfg):
-    """Construct NNGenerator from config dict."""
-    transformer = mf.models.NNTransformer(
-        input_features=cfg["generator"]["input_features"],
-        output_features=cfg["generator"]["output_features"],
-        hidden_layers=cfg["generator"]["hidden_layers"],
-        hidden_units=cfg["generator"]["hidden_units"],
-        dropout=cfg["generator"]["dropout"],
-        activation=cfg["generator"]["activation"],
-    )
-    base = torch.distributions.Normal(
-        torch.zeros(cfg["generator"]["input_features"]),
-        torch.ones(cfg["generator"]["input_features"])
-    )
-    return mf.models.NNGenerator(base, transformer)
-
-
-def make_generator(cfg, gen_model="nsf"):
-    """Construct generative model from config dict."""
-    _functions = {
-        "nsf": make_generator_nsf,
-        "nn": make_generator_nn,
-    }
-    _function = _functions[gen_model]
-    return _function(cfg)
-
-
-def setup_model(cfg: dict, gen_model="nsf"):
-    """Set up MENT-Flow model architecture from config."""
+def setup_model(cfg: dict):
+    """Set up MENT-Flow model architecture from config."""   
+    gen = mf.gen.build_gen(**cfg["gen"])
+    
     model = mf.MENTFlow(
-        generator=make_generator(cfg, gen_model),
+        gen=gen,
         prior=None, 
         entropy_estimator=None,
         transforms=None,
@@ -92,26 +41,25 @@ def setup_model(cfg: dict, gen_model="nsf"):
     return model
 
 
-def load_model(cfg: dict, checkpoint_path: str, gen_model="nsf"):
-    """Load MENT-Flow model architecture (from config) and parameters (from checkpoint)."""
-    model = setup_model(cfg, gen_model)
+def load_model(cfg: dict, checkpoint_path: str):
+    """Load MENT-Flow model architecture (from cfg) and parameters (from checkpoint_path)."""
+    model = setup_model(cfg)
     model.load(checkpoint_path)
     return model
 
 
-def load_run(folder, gen_model="nsf"):  
-    """Load all data from run."""
-    args    = load_pickle_safe(os.path.join(folder, "args.pkl"))
+def load_run(folder):
+    """Load data from training run."""
     cfg     = load_pickle_safe(os.path.join(folder, "cfg.pkl"))
     dist    = load_pickle_safe(os.path.join(folder, "dist.pkl"))
     history = load_pickle_safe(os.path.join(folder, "history.pkl"))
 
-    model = setup_model(cfg, gen_model)
+    model = setup_model(cfg)
     model.eval()
     
-    checkpoints = []
     subdir = os.path.join(folder, "checkpoints")
     checkpoint_paths = [os.path.join(subdir, f) for f in sorted(os.listdir(subdir))]
+    checkpoints = []
     for checkpoint_path in checkpoint_paths:
         (step, iteration) = get_epoch_and_iteration_number(checkpoint_path)
         checkpoint = {
@@ -121,11 +69,11 @@ def load_run(folder, gen_model="nsf"):
         }
         checkpoints.append(checkpoint)
 
-    return {
+    output = {
         "model": model,
         "checkpoints": checkpoints,
-        "args": args,
         "cfg": cfg,
         "dist": dist,
         "history": history,
     }
+    return output

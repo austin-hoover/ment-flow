@@ -12,7 +12,7 @@ from mentflow.data.distribution import normalize
 from mentflow.data.radial import Gaussian
 from mentflow.data.radial import Hollow
 from mentflow.data.radial import Rings
-from mentflow.utils.image import sample_hist
+from mentflow.sample import sample_hist
 
 
 

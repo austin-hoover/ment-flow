@@ -1,15 +1,15 @@
-"""Non-invertible neural network generator.
+"""Neural network generator.
 
 References
 ----------
 [1] https://doi.org/10.1103/PhysRevLett.130.145001
 """
-from typing import Tuple
+from typing import Tuple, List
 
 import torch    
 import torch.nn as nn
 
-from mentflow.types_ import TrainableDistribution
+from .gen import GenModel
 
 
 def get_activation(activation):
@@ -45,15 +45,16 @@ class NNTransformer(nn.Module):
         return self.layers(x)
 
 
-class NNGenerator(TrainableDistribution):
-    def __init__(self, base=None, transformer=None) -> None:
+class NNGen(GenModel):
+    def __init__(self, base=None, network=None) -> None:
         super().__init__()
-        self.transformer = transformer
+        self.network = network
         self.base = base
+        self.has_prob = False
 
     def sample(self, n: int) -> torch.Tensor:
         x = self.base.rsample((n,))
-        x = self.transformer(x)
+        x = self.network(x)
         return x
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
@@ -64,8 +65,17 @@ class NNGenerator(TrainableDistribution):
         log_prob = None
         return (x, log_prob)
 
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        return self.network(z)
+
+    def forward_steps(self, z: torch.Tensor) -> List[torch.Tensor]:
+        return [z, self.network(z)]
+
+    def sample_base(self, n: int) -> torch.Tensor:
+        return self.base.rsample((n,))
+
     def to(self, device):
-        self.transformer = self.transformer.to(device)
+        self.network = self.network.to(device)
         return self
 
         

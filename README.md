@@ -21,5 +21,5 @@ pip install -e .
 ## Experiments
 
 ```
-python experiments/2d_from_1d/train_flow.py --device=mps
+python experiments/rec_2d/linear/train_flow.py device=mps
 ```

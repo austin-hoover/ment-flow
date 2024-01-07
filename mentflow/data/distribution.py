@@ -1,8 +1,10 @@
 import numpy as np
 import torch
 
+import mentflow.types_
 
-class Distribution:
+
+class Distribution(mentflow.types_.Distribution):
     def __init__(self, d=2, rng=None, normalize=False, shuffle=True, noise=None, decorr=False):
         self.d = d
         self.rng = rng
@@ -16,11 +18,8 @@ class Distribution:
     def _sample(self, n):
         raise NotImplementedError
 
-    def prob(self, x):
-        raise NotImplementedError 
-
     def sample_numpy(self, n):
-        x = self._sample(n)
+        x = self._sample(int(n))
         if self.shuffle:
             x = shuffle(x, rng=self.rng)
         if self.normalize:
@@ -31,7 +30,7 @@ class Distribution:
             x = decorrelate(x, rng=self.rng)
         return x
 
-    def sample(self, n):
+    def sample(self, n: int) -> torch.Tensor:
         return torch.from_numpy(self.sample_numpy(n))
 
 

@@ -31,14 +31,9 @@ class Logger(abc.ABC):
 
 class ListLogger(Logger):
     """Manually save the data to the class in a dict."""
-    def __init__(self,
-        save: bool = True,
-        path: str = None,
-        freq: int = 1,
-    ):
-        self.save = save
+    def __init__(self,path: str = None, freq: int = 1):
         self.path = path
-        if save:
+        if self.path:
             if not pathlib.Path(self.path).parent.exists():
                 pathlib.Path(self.path).parent.mkdir(exist_ok=True, parents=True)
         self.freq = freq
@@ -68,11 +63,11 @@ class ListLogger(Logger):
                 self.history[key] = [value]
 
         self.iteration += 1
-        if self.save and ((self.iteration + 1) % self.freq == 0):
+        if self.path and ((self.iteration + 1) % self.freq == 0):
             pickle.dump(self.history, open(self.path, "wb"))  # overwrite
 
     def close(self) -> None:
-        if self.save:
+        if self.path:
             pickle.dump(self.history, open(self.path, "wb"))
 
 

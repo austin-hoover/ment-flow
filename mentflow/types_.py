@@ -11,7 +11,7 @@ import torch
 
 
 class Distribution(abc.ABC):
-    """Base class for probability distributions."""
+    """Base class for probability distributions."""    
     @abc.abstractmethod
     def sample(self, n: int) -> torch.Tensor:
         """Sample n points."""
@@ -26,10 +26,6 @@ class Distribution(abc.ABC):
     def sample_and_log_prob(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample n points and compute the log-probability at each point."""
         raise NotImplementedError
-
-
-class TrainableDistribution(Distribution, torch.nn.Module):
-    """Base class for distributions with trainable parameters (i.e., normalizing flows)."""
 
 
 class PriorDistribution(typing.Protocol):

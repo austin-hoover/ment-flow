@@ -148,17 +148,21 @@ model = mf.MENTFlow(
 model = model.to(device)
 print(model)
 
-cfg = {
+# Save generator info for evaluation.
+cfg_eval = {
     "generator": {
+        "type": type(model.generator),
         "input_features": d,
         "output_features": d,
         "transforms": args.transforms,
         "spline_bins": args.spline_bins,
         "hidden_units": args.hidden_units,
         "hidden_layers": args.hidden_layers,
+        "randperm": True,
+        "invert": True,
     },
 }
-man.save_pickle(cfg, "cfg.pkl")
+man.save_pickle(cfg_eval, "info.pkl")
 
 
 # Training

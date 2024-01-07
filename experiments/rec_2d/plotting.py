@@ -15,6 +15,7 @@ from experiments.plotting import set_proplot_rc
 
 
 def plot_dist(x0, x, prob=None, coords=None, bins=75, limits=None, **kws):
+    """Plot two-dimensional distributions side-by-side."""
     ncols = 3
     if prob is None:
         ncols = 2
@@ -59,18 +60,18 @@ def plot_model(
     x_true = send(x_true)
 
     # Simulate measurements.
+    settings = []
+    for diagnostic in model.diagnostics:
+        settings.append(diagnostic.kde)
+        diagnostic.kde = False
+
     if type(model) is mf.models.ment.MENT and "integrate" in sim_kws:
         predictions = model.simulate(**sim_kws)
     else:
-        settings = []
-        for diagnostic in model.diagnostics:
-            settings.append(diagnostic.kde)
-            diagnostic.kde = False
-    
         predictions = model.simulate(x=x, **sim_kws)
-    
-        for setting, diagnostic in zip(settings, model.diagnostics):
-            diagnostic.kde = setting
+
+    for setting, diagnostic in zip(settings, model.diagnostics):
+        diagnostic.kde = setting
 
     
     figs = []
