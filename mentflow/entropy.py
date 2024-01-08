@@ -61,3 +61,16 @@ class MonteCarloEntropyEstimator(EntropyEstimator):
         if self.prior is not None:
             H = H - torch.mean(self.prior.log_prob(x))
         return H
+        
+
+def get_entropy_estimator(name, **kws):
+    constructors = {
+        None: EmptyEntropyEstimator,
+        False: EmptyEntropyEstimator,
+        "none": EmptyEntropyEstimator,
+        "cov": CovarianceEntropyEstimator,
+        "knn": KNNEntropyEstimator,
+        "mc": MonteCarloEntropyEstimator,
+    }
+    constructor = constructors[name]
+    return constructor(**kws)

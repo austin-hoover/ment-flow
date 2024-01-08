@@ -1,6 +1,5 @@
 defaults:
-    - model: default
-    - train: default
+    - base
     - _self_
 
 data:
@@ -12,24 +11,9 @@ data:
     
 meas:
     num: 6
-    min_angle: 0.0
-    max_angle: 180.0
     xmax: 3.5
     bins: 85
-    noise: 0.0
+    noise_scale: 0.0
     noise_type: "gaussian"
-
-gen:
-    name: "nsf"
-    input_features: 2
-    output_features: 2
-    hidden_layers: 3
-    hidden_units: 64
-    transforms: 5
-    bins: 20
-    randperm: true
-    invert: true
-
-
-seed: null
-device: "cpu"
+    min_angle: 0.0
+    max_angle: 180.0

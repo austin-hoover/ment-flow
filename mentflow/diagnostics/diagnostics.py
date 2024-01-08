@@ -8,6 +8,7 @@ import torch
 from mentflow.diagnostics.histogram import kde_histogram_1d
 from mentflow.diagnostics.histogram import kde_histogram_2d
 from mentflow.utils import coords_from_edges
+from mentflow.utils import unravel
 
 
 class Diagnostic(torch.nn.Module):
@@ -18,7 +19,35 @@ class Diagnostic(torch.nn.Module):
         raise NotImplementedError
 
 
-class Histogram1D(Diagnostic):
+class Histogram(Diagnostic):
+    def __init__(self, noise_scale=0.0, noise_type="gaussian"):
+        super().__init__()
+        self.noise = True
+        self.noise_scale = noise_scale
+        self.noise_type = noise_type
+
+    def set_noise(self, setting) -> None:
+        self.noise = setting
+        
+    def _forward(self, x: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        hist = self._forward(x)
+
+        if self.noise and self.noise_scale:
+            if self.noise_type == "uniform":
+                frac_noise = self.noise_scale * torch.rand(hist.shape[0]) * 2.0
+            else:
+                frac_noise = self.noise_scale * torch.randn(hist.shape[0])
+            frac_noise = frac_noise.type(torch.float32)
+            hist = hist * (1.0 + frac_noise)
+            hist = torch.clamp(hist, 0.0, None)
+
+        return hist
+            
+
+class Histogram1D(Histogram):
     """One-dimensional histogram."""
     def __init__(
         self,
@@ -39,7 +68,7 @@ class Histogram1D(Diagnostic):
         bandwidth : float
             Gaussian kernel width relative to bin width (default: 1.0)
         **kws
-            Key word arguments passed to `Diagnostic`.
+            Key word arguments passed to `Histogram`.
         """
         super().__init__(**kws)
         self.axis = axis
@@ -52,7 +81,7 @@ class Histogram1D(Diagnostic):
         self.register_buffer("bandwidth", bandwidth * self.resolution)
         self.kde = kde
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
 
         Parameters
@@ -75,7 +104,7 @@ class Histogram1D(Diagnostic):
             return hist
             
 
-class Histogram2D(Diagnostic):
+class Histogram2D(Histogram):
     """Two-dimensional histogram."""
     def __init__(
         self,
@@ -96,7 +125,7 @@ class Histogram2D(Diagnostic):
         bandwidth : list[float]
             Gaussian kernel width relative to bin widths (default: 1.0).
         **kws
-            Key word arguments passed to `Diagnostic`.
+            Key word arguments passed to `Histogram`.
         """
         super().__init__(**kws)
         self.axis = axis
@@ -114,7 +143,7 @@ class Histogram2D(Diagnostic):
         self.bandwidth = [self.bandwidth [i] * self.resolution[i] for i in range(d)]
         self.kde = kde
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
 
         Parameters

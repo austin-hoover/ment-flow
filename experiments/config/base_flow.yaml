@@ -1,0 +1,12 @@
+defaults:
+    - base
+    - _self_
+
+gen:
+    name: "nsf"
+    hidden_layers: 3
+    hidden_units: 64
+    transforms: 5
+    bins: 20
+    randperm: true
+    invert: true

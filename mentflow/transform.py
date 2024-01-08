@@ -38,23 +38,6 @@ class Transform(nn.Module):
         return (x, ladj)
 
 
-class SymplecticTransform(Transform):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def inverse(self, y: torch.Tensor):
-        x = y.clone()  # better way to do this?
-        for i in range(0, x.shape[1], 2):
-            x[:, i + 1] *= -1.0
-        x = self.forward(x)
-        for i in range(0, x.shape[1], 2):
-            x[:, i + 1] *= -1.0
-        return x
-
-    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return torch.zeros(x.shape[0])
-
-
 class CompositeTransform(nn.Module):
     def __init__(self, *transforms) -> None:
         super().__init__()
@@ -84,10 +67,54 @@ class CompositeTransform(nn.Module):
             y = transform.inverse(y)
         return y
 
+    def reverse_transforms(self) -> None:
+        self.transforms = nn.Sequential(*reversed([layer for layer in self.transforms]))
+
     def to(self, device):
         for transform in self.transforms:
             transform.to(device)
         return self
+
+
+class SymplecticTransform(Transform):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def inverse(self, y: torch.Tensor) -> torch.Tensor:
+        x = y.clone()
+        x = reverse_momentum(x)
+        x = self.forward(x)
+        x = reverse_momentum(x)
+        return x        
+        
+    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(x.shape[0])
+        
+
+def CompositeSymplecticTransform(CompositeTransform):
+    def __init___(self, *transforms) -> None:
+        super().__init__(*transforms)
+
+    def inverse(self, y: torch.Tensor) -> torch.Tensor:
+        self.reverse_transforms()
+        x = y.clone()
+        x = reverse_momentum(x)
+        x = self.forward(x)
+        x = reverse_momentum(x)
+        self.reverse_transforms()
+        return x
+
+    def inverse_and_ladj(self, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        self.reverse_transforms()
+        y = x.clone()
+        y = reverse_momentum(y)
+        ladj = 0.0
+        for transform in self.transforms:
+            y, _ladj = transform.inverse_and_ladj(y)
+            ladj += _ladj
+        y = reverse_momentum(y)
+        self.reverse_transforms()
+        return (y, ladj)
 
 
 class LinearTransform(SymplecticTransform):
@@ -129,3 +156,12 @@ def rotation_matrix(angle):
     _cos = np.cos(angle)
     _sin = np.sin(angle)
     return torch.tensor([[_cos, _sin], [-_sin, _cos]])
+
+
+def reverse_momentum(x):
+    for i in range(0, x.shape[1], 2):
+        x[:, i + 1] *= -1.0
+    x = self.forward(x)
+    for i in range(0, x.shape[1], 2):
+        x[:, i + 1] *= -1.0
+    return x

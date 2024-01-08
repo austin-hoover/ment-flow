@@ -8,6 +8,7 @@ from typing import Callable
 import torch
 import torch.nn as nn
 import zuko
+from omegaconf import DictConfig
 
 import mentflow as mf
 
@@ -26,9 +27,10 @@ def get_epoch_and_iteration_number(checkpoint_filename):
     return epoch, iteration
 
 
-def setup_model(cfg: dict):
+def setup_model(cfg: DictConfig):
     """Set up MENT-Flow model architecture from config."""   
-    gen = mf.gen.build_gen(**cfg["gen"])
+    build_gen_kws = cfg["gen"]
+    gen = mf.gen.build_gen(**build_gen_kws)
     
     model = mf.MENTFlow(
         gen=gen,
@@ -51,7 +53,6 @@ def load_model(cfg: dict, checkpoint_path: str):
 def load_run(folder):
     """Load data from training run."""
     cfg     = load_pickle_safe(os.path.join(folder, "cfg.pkl"))
-    dist    = load_pickle_safe(os.path.join(folder, "dist.pkl"))
     history = load_pickle_safe(os.path.join(folder, "history.pkl"))
 
     model = setup_model(cfg)
@@ -73,7 +74,7 @@ def load_run(folder):
         "model": model,
         "checkpoints": checkpoints,
         "cfg": cfg,
-        "dist": dist,
         "history": history,
     }
     return output
+

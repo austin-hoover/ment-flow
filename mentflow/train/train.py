@@ -24,22 +24,20 @@ class Trainer:
         model: MENTFlow,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: Any,
-        plotter=None,
-        evaluator=None,
+        plot=None,
+        eval=None,
         output_dir=None,
-        precision=torch.float32,
-        device=None,
         notebook=False,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+
+        self.plot = plot
+        self.eval = eval
         
-        self.precision = precision
-        self.device = device
         self.notebook = notebook
 
-        # Make output directories.
         self.output_dir = output_dir
         if self.output_dir is not None:
             os.makedirs(self.output_dir, exist_ok=True)
@@ -50,22 +48,18 @@ class Trainer:
             self.checkpoint_dir = os.path.join(self.output_dir, f"checkpoints")
             os.makedirs(self.checkpoint_dir, exist_ok=True)
             
-        self.plotter = plotter
-        self.evaluator = evaluator
-
     def get_filename(self, filename: str, epoch: int, iteration: int, ext: str = None) -> str:
         filename = f"{filename}_{epoch:03.0f}_{iteration:05.0f}"
         if ext is not None:
             filename = f"{filename}.{ext}"
         return filename
-
     
-    def plot(self, epoch: int, iteration: int, **savefig_kws) -> None:
-        if self.plotter is None:
+    def plot_model(self, epoch: int, iteration: int, **savefig_kws) -> None:
+        if self.plot is None:
             return
             
         ext = savefig_kws.pop("ext", "png")
-        figs = self.plotter(self.model)
+        figs = self.plot(self.model)
         for index, fig in enumerate(figs):
             if self.output_dir is not None:
                 path = self.get_filename(f"fig_{index:02.0f}", epoch, iteration, ext=ext)
@@ -76,9 +70,9 @@ class Trainer:
                 plt.show()
             plt.close("all")
 
-    def evaluate(self, epoch: int, iteration: int):
-        if self.evaluator is not None:
-            self.evaluator(self.model)
+    def eval_model(self, epoch: int, iteration: int):
+        if self.eval is not None:
+            self.eval(self.model)
 
         path = self.get_filename("model", epoch, iteration, ext="pt")
         path = os.path.join(self.checkpoint_dir, path)
@@ -106,7 +100,7 @@ class Trainer:
         eval_freq: int = None,
         savefig_kws: Optional[dict] = None,
     ) -> None:
-        """Train using the Penalty Method (PM).
+        """Train using the penalty method.
         
         The `penalty_step` and `penalty_scale` parameters determine the penalty parameter step 
         size and scaling factor after each epoch. These numbers should be as small as possible 
@@ -207,8 +201,8 @@ class Trainer:
                     with torch.no_grad():
                         curr_state_dict = self.model.state_dict()
                         self.model.load_state_dict(best_state_dict)
-                        self.plot(epoch, iteration, **savefig_kws)
-                        self.evaluate(epoch, iteration)                        
+                        self.plot_model(epoch, iteration, **savefig_kws)
+                        self.eval_model(epoch, iteration)                        
                         self.model.load_state_dict(curr_state_dict)
                     self.model.train()
 

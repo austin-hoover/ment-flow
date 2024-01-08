@@ -1,4 +1,4 @@
-"""Train 2D normalizing flow on linear 1D projection."""
+"""Train 2D neural network generator on linear 1D projection."""
 import os
 import pathlib
 from typing import Callable
@@ -19,9 +19,10 @@ import setup
 mf.train.plot.set_proplot_rc()
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_flow.yaml")
+@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_nn.yaml")
 def main(cfg: DictConfig):
-    print(cfg)
+    for key in cfg:
+        print(key)
 
     path = pathlib.Path(__file__)
     output_dir = os.path.join(path.parent.absolute(), f"./output/{cfg.data.name}/")

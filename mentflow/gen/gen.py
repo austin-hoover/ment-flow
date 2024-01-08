@@ -21,3 +21,6 @@ class GenModel(Distribution, torch.nn.Module):
 
     def sample_base(self, n: int) -> torch.Tensor:
         raise NotImplementedError
+
+    def dim(self) -> int:
+        raise NotImplementedError

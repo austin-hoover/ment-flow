@@ -1,19 +1,16 @@
 # 2D reconstruction from linear 1D projections
 
-See `arguments.py` for default arguments passed to the scripts. These arguments can be changed from the command line:
+Reconstruct a two-dimensional distribution from linear one-dimensional projections (2:1). The transformations are rotation matrices with evenly spaced angles.
 
+See `/experiments/config/` for command line arguments. Example:
 ```
-python train_flow.py --device="mps" --data="swissroll" --transforms=5
+python train_flow.py device=mps data.name="swissroll" meas.num=6 gen.name="nsf"
 ```
+This will saved model parameters, config files, and figures to `/experiments/rec_2d/linear/output/swissroll/train_flow/{timestamp}/`
 
 
-## Linear projections
-* `train_flow.py`: train MENT-Flow model (neural spline flow generator) on linear one-dimensional projections
-* `train_nn.py` train MENT-Flow model (neural network generator) on linear one-dimensional projections
-* `train_ment.py` train MENT model on linear one-dimensional projections
-* Notebooks ending in `ipynb` do the same thing.
-
-
-## Analysis
-* `eval_flow.py`: evaluate MENT-Flow model (neural spline flow generator)
-* `eval_nn.py`: evaluate MENT-Flow model (neural network generator)
+* `train_flow.py`: train MENT-Flow model 
+* `train_ment.py`: train MENT model
+* `eval_flow.ipynb`: evaluate MENT-Flow model
+* `eval_ment.ipynb`: evaluate MENT model
+* `setup.py`: contains setup functions used in training scripts

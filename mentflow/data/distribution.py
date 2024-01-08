@@ -4,8 +4,8 @@ import torch
 import mentflow.types_
 
 
-class Distribution(mentflow.types_.Distribution):
-    def __init__(self, d=2, rng=None, normalize=False, shuffle=True, noise=None, decorr=False):
+class Distribution:
+    def __init__(self, d=2, rng=None, normalize=False, shuffle=True, noise=None, decorr=False, x=None):
         self.d = d
         self.rng = rng
         if self.rng is None:
@@ -14,24 +14,44 @@ class Distribution(mentflow.types_.Distribution):
         self.noise = noise
         self.shuffle = shuffle
         self.decorr = decorr
+        self.x = x
+        if self.x is not None:
+            self.d = x.shape[1]
 
-    def _sample(self, n):
+    def _sample(self, n) -> np.ndarray:
         raise NotImplementedError
 
-    def sample_numpy(self, n):
-        x = self._sample(int(n))
-        if self.shuffle:
-            x = shuffle(x, rng=self.rng)
-        if self.normalize:
-            x = normalize(x)
-        if self.noise:
-            x = corrupt(x, self.noise, rng=self.rng)
-        if self.decorr:
-            x = decorrelate(x, rng=self.rng)
+    def _log_prob(self, x) -> np.ndarray:
+        raise NotImplementedError
+        
+    def sample_numpy(self, n: int) -> np.ndarray:
+        x = None
+        n = int(n)
+        if self.x is not None:
+            x = self.x[:n, :]
+        else:
+            x = self._sample(n)
+            if self.shuffle:
+                x = shuffle(x, rng=self.rng)
+            if self.normalize:
+                x = normalize(x)
+            if self.noise:
+                x = corrupt(x, self.noise, rng=self.rng)
+            if self.decorr:
+                x = decorrelate(x, rng=self.rng)
         return x
 
     def sample(self, n: int) -> torch.Tensor:
-        return torch.from_numpy(self.sample_numpy(n))
+        x = self.sample_numpy(n)
+        x = torch.from_numpy(x)
+        x = x.type(torch.float32)
+        return x
+        
+    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+        log_prob = self._log_prob(x)
+        log_prob = torch.from_numpy(log_prob)
+        log_prob = log_prob.type(torch.float32)
+        return log_prob
 
 
 def corrupt(x, scale, rng=None):

@@ -19,7 +19,7 @@ import setup
 mf.train.plot.set_proplot_rc()
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_flow.yaml")
+@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_linear.yaml")
 def main(cfg: DictConfig):
     print(cfg)
 
@@ -38,6 +38,7 @@ def main(cfg: DictConfig):
 
     model = setup.setup_model(
         cfg,
+        d=2,
         transforms=transforms,
         diagnostics=diagnostics,
         measurements=measurements,

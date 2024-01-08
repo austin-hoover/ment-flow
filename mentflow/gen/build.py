@@ -7,7 +7,7 @@ import zuko
 from .gen import GenModel
 from .nn import NNGen
 from .nn import NNTransformer
-from .wrappers import WrappedZukoFlow
+from .flow import WrappedZukoFlow
 
 
 def build_flow(
@@ -18,9 +18,10 @@ def build_flow(
     hidden_units: int,
     transforms: int,
     invert=True,
+    device=None,
     **kws    
 ) -> WrappedZukoFlow:
-    """Build normalizing flow (zuko)."""
+    """Build normalizing flow (mentflow.gen.WrappedZukoFlow)."""
     constructors = {
         "ffjord": zuko.flows.CNF,
         "gf": zuko.flows.GF,
@@ -35,12 +36,13 @@ def build_flow(
 
     kws["features"] = output_features
     kws["hidden_features"] = hidden_layers * [hidden_units]
-    if "transforms" in inspect.signature(constructor).parameters:
-        kws["transforms"] = transforms
+    kws["transforms"] = transforms
 
     flow = constructor(**kws)
     if invert:
         flow = zuko.flows.Flow(flow.transform.inv, flow.base)
+    if device is not None:
+        flow = flow.to(device)
     return WrappedZukoFlow(flow)
 
 
@@ -51,15 +53,19 @@ def build_nn(
     hidden_units: int,
     dropout: int,
     activation: str,
+    device=None,
 ) -> NNGen:
-    """Build neural network generator.
+    """Build neural network generator (mentflow.gen.NN)."""
+    loc = torch.zeros(input_features)
+    loc = loc.type(torch.float32)
+    cov = torch.eye(input_features)
+    cov = cov.type(torch.float32)
+    if device is not None:
+        loc = loc.to(device)
+        cov = cov.to(device)
 
-    Key word arguments passed to mentflow.gen.NNTransformer.
-    """
-    base = torch.distributions.Normal(
-        torch.zeros(input_features),
-        torch.ones(input_feaetures),
-    )
+    base = torch.distributions.MultivariateNormal(loc, cov)
+    
     transformer = NNTransformer(
         input_features=input_features,
         output_features=output_features,
@@ -71,7 +77,7 @@ def build_nn(
     return NNGen(base, transformer)
 
 
-def build_gen(name: str, **kws) -> GenModel:
+def build_gen(name: str, device=None, **kws) -> GenModel:
     """Build generative model.
 
     Parameters
@@ -88,6 +94,7 @@ def build_gen(name: str, **kws) -> GenModel:
             - "unaf": zuko.flows.UNAF
         - Non-invertible neural networks:
             - "nn": mentflow.gen.NNGen
+    device: torch.device
     **kws
         Key word arguments are passed to the model constructor.
 
@@ -98,6 +105,6 @@ def build_gen(name: str, **kws) -> GenModel:
     """
     build = None
     if name == "nn":
-        return build_nn(**kws)
+        return build_nn(device=device, **kws)
     else:
-        return build_flow(name, **kws)
+        return build_flow(name=name, device=device, **kws)

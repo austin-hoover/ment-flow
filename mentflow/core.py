@@ -10,7 +10,9 @@ import torch.nn as nn
 import zuko
 
 from mentflow.entropy import EntropyEstimator
+from mentflow.entropy import get_entropy_estimator
 from mentflow.gen import GenModel
+from mentflow.sim import Simulator
 from mentflow.loss import get_loss_function
 from mentflow.types_ import Model
 from mentflow.types_ import PriorDistribution
@@ -18,15 +20,15 @@ from mentflow.utils import unravel
 
 
 class MENTFlow(Model, nn.Module):
-    """Flow-based maximum entropy tomography (MENT) solver."""
+    """Flow-based maximum entropy tomography solver."""
     def __init__(
         self,
         gen: GenModel,
         prior: Type[nn.Module],
+        entropy_estimator: str,
         transforms: List[Type[nn.Module]],
-        diagnostics: List[Type[nn.Module]],
+        diagnostics: List[List[Type[nn.Module]]],
         measurements: List[List[torch.Tensor]],
-        entropy_estimator: Optional[EntropyEstimator] = None,
         discrepancy_function: str = "kld",
         penalty_parameter: float = 10.0,
     ) -> None:
@@ -37,16 +39,21 @@ class MENTFlow(Model, nn.Module):
         gen : GenModel
             A trainable model that generates samples and (possibly) evalutes the probability 
             density.
-        entropy_estimator : EntropyEstimator
-            Estimates entropy from samples and probability density.
+        entropy_estimator : str
+            Method to estimate entropy from samples and probability density. 
+            Options: 
+                - "mc": monte carlo
+                - "cov": covariance matrix
+                - "knn": k nearest neighbors
+                - None: return 0
         prior : Type[nn.Module]
             A prior distribution for relative entropy estimates. If None, use absolute entropy.
         transforms : list[nn.Module]
             The ith transform is applied before the ith measurement.
-        diagnostics : list[torch.nn.Module]
-            Diagnostics used to measure the distribution after each transform. 
-        measurements : list[list[tensor], shape=len(diagnostics)], shape=len(transforms)
-            The measurement data for each transform and diagnostic.
+        diagnostics : list[list[torch.nn.Module]
+            diagnostics[i] is a list of diagnostics to apply after transform i.
+        measurements : list[list[tensor]
+            The measurement data for each diagnostic.
         discrepancy_function : {"kld", "mae", "mse"}
             Function used to estimate discrepancy between simulated and measured projections.
             - "kld": KL divergence
@@ -57,49 +64,33 @@ class MENTFlow(Model, nn.Module):
         """
         super().__init__()
         self.gen = gen
-        self.entropy_estimator = entropy_estimator
-        self.set_prior(prior)
-        self.set_diagnostics(diagnostics)
-        self.set_measurements(measurements)
+        self.entropy_estimator = get_entropy_estimator(entropy_estimator)
+        self.prior = self.set_prior(prior)
         self.transforms = transforms
+        self.diagnostics = self.set_diagnostics(diagnostics)
+        self.measurements = self.set_measurements(measurements)
+        self.sim = Simulator(self.transforms, self.diagnostics)
         self.discrepancy_function = get_loss_function(discrepancy_function)
         self.penalty_parameter = penalty_parameter
-
-    def set_diagnostics(self, diagnostics: List[Type[nn.Module]]):
-        self.diagnostics = diagnostics
-        if self.diagnostics is None:
-            self.diagnostics = []
-        self.n_diag = len(self.diagnostics)
-
-    def set_measurements(self, measurements: List[List[torch.Tensor]]):
-        self.measurements = measurements
-        if self.measurements is None:
-            self.measurements = []
-        self.n_meas = len(self.measurements)
 
     def set_prior(self, prior):
         self.prior = prior
         if self.entropy_estimator is not None:
             self.entropy_estimator.prior = prior
+        return self.prior
 
-    def discrepancy(self, predictions) -> List[torch.Tensor]:
-        """Compute simulation-measurement discrepancy vector.
+    def set_diagnostics(self, diagnostics: List[Type[nn.Module]]):
+        self.diagnostics = diagnostics
+        if self.diagnostics is None:
+            self.diagnostics = [[]]
+        self.sim = Simulator(self.transforms, self.diagnostics)
+        return self.diagnostics
 
-        Parameters
-        ----------
-        predictions : list[tensor], shape (n_meas, n_diag)
-            Predictions.
-
-        Returns
-        -------
-        list[tensor], shape (n_meas * n_diag,)
-            The discrepancy vector.
-        """
-        discrepancy_vector = []
-        for prediction, measurement in zip(unravel(predictions), unravel(self.measurements)):
-            discrepancy = self.discrepancy_function(prediction, measurement)
-            discrepancy_vector.append(discrepancy)
-        return discrepancy_vector
+    def set_measurements(self, measurements: List[List[torch.Tensor]]):
+        self.measurements = measurements
+        if self.measurements is None:
+            self.measurements = [[]]
+        return self.measurements
 
     def sample(self, n: int) -> torch.Tensor:
         """Sample n points."""
@@ -111,28 +102,13 @@ class MENTFlow(Model, nn.Module):
 
     def sample_and_log_prob(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample n points and return the log probability at each point."""
-        raise self.gen.sample_and_log_prob(x)
+        return self.gen.sample_and_log_prob(n)
 
     def sample_and_entropy(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample n points and estimate the entropy from the samples."""
-        x, log_prob = self.gen.sample_and_log_prob(n)
+        x, log_prob = self.sample_and_log_prob(n)
         H = self.entropy_estimator(x, log_prob)
         return (x, H)
-
-    def simulate(self, x: torch.Tensor) -> List[List[torch.Tensor]]:
-        """Simulate the measurements.
-
-        Parameters
-        ----------
-        x : torch.tensor, shape (n, d)
-            Particle coordinates.
-
-        Returns
-        -------
-        predictions : list[list[tensor], shape (n_diag)], shape (n_meas,)
-            The simulated measurements.
-        """
-        return simulate(x, self.transforms, self.diagnostics)
 
     def loss(self, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
         """Estimate the loss from a new batch.
@@ -151,12 +127,16 @@ class MENTFlow(Model, nn.Module):
             Estimated entropy. If `self.prior` is not None, this is the negative relative entropy,
             or the KL divergence between the model and prior distribution. Otherwise we estimate
             the absolute entropy.
-        D : tensor, shape (n_meas * n_diag,)
+        D : tensor, shape (len(measurements) * len(diagnostics))
             The discrepancy vector.
         """
         x, H = self.sample_and_entropy(batch_size)
-        predictions = self.simulate(x)        
-        D = self.discrepancy(predictions)
+
+        predictions = self.sim.forward(x)
+        D = []
+        for pred, meas in zip(unravel(predictions), unravel(self.measurements)):
+            D.append(self.discrepancy_function(pred, meas))
+        
         L = H + self.penalty_parameter * (sum(D) / len(D))
         return (L, H, D)
 
@@ -190,44 +170,18 @@ class MENTFlow(Model, nn.Module):
 
     def to(self, device):
         if self.transforms is not None:
-            for i in range(len(self.transforms)):
-                self.transforms[i] = self.transforms[i].to(device)
-        if len(self.diagnostics) > 0:
-            for j in range(len(self.diagnostics)):
-                self.diagnostics[j] = self.diagnostics[j].to(device)
+            for transform in self.transforms:
+                transform = transform.to(device)
+        if self.diagnostics is not None:
+            for index in range(len(self.diagnostics)):
+                for diagnostic in self.diagnostics[index]:
+                    diagnostic = diagnostic.to(device)
+        if self.measurements is not None:
+            for index in range(len(self.measurements)):
+                for measurement in self.measurements[index]:
+                    measurement = measurement.to(device)
         if self.gen is not None:
             self.gen = self.gen.to(device)
         return self
 
-    def has_log_prob(self, x=None):
-        if x is None:
-            x = torch.randn((2, self.d))
-        try:
-            self.log_prob(x)
-            return True
-        except NotImplementedError:
-            return False
-
-
-def simulate(x, transforms, diagnostics):        
-    predictions = []
-    for transform in transforms:
-        x_out = transform(x)
-        predictions.append([diagnostic(x_out) for diagnostic in diagnostics])
-    return predictions
-
-
-def simulate_nokde(x, transforms, diagnostics):
-    settings = []
-    for diagnostic in diagnostics:
-        settings.append(diagnostic.kde)
-        diagnostic.kde = False
-        
-    predictions = simulate(x, transforms, diagnostics)
-
-    for setting, diagnostic in zip(settings, diagnostics):
-        diagnostic.kde = setting
-
-    return predictions
-    
 

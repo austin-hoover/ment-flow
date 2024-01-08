@@ -25,8 +25,8 @@ class NNTransformer(nn.Module):
         self,
         input_features: int = 2,
         output_features: int = 2,
-        hidden_layers: int = 3,
-        hidden_units: int = 64,
+        hidden_layers: int = 2,
+        hidden_units: int = 20,
         dropout: float = 0.0,
         activation="tanh",
     ) -> None:
@@ -75,6 +75,7 @@ class NNGen(GenModel):
         return self.base.rsample((n,))
 
     def to(self, device):
+        self.base.loc
         self.network = self.network.to(device)
         return self
 

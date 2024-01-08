@@ -1,0 +1,8 @@
+defaults:
+    - rec_2d
+    - base_nn
+    - _self_
+
+gen:
+    input_features: 2
+    output_features: 2
