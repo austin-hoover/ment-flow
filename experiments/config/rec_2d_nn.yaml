@@ -1,6 +1,9 @@
 defaults:
+    - base
+    - model: nn
+    - gen: nn
+    - train: nn
     - rec_2d
-    - base_nn
     - _self_
 
 gen:

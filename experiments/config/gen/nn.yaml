@@ -1,0 +1,5 @@
+name: "nn"
+hidden_layers: 2
+hidden_units: 20
+dropout: 0.0
+activation: "tanh"

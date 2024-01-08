@@ -6,6 +6,7 @@ To do:
 """
 import os
 import pathlib
+import sys
 from typing import Callable
 
 import hydra
@@ -15,6 +16,7 @@ import ot
 import torch
 import zuko
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import mentflow as mf
 from mentflow.utils import grab
@@ -25,21 +27,19 @@ import setup
 
 @hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_ment.yaml")
 def main(cfg: DictConfig):
-
+    print(cfg)
     print(f"Working directory : {os.getcwd()}")
     print(f"Output directory  : {hydra.core.hydra_config.HydraConfig.get().runtime.output_dir}")
     
-    # print(cfg)
-
     
     # Output paths
     # --------------------------------------------------------------------------------------
     path = pathlib.Path(__file__)
-    output_dir = os.path.join(path.parent.absolute(), f"./output/{cfg.data.name}/")
+    output_dir = os.path.join(path.parent.absolute(), f"./output/{path.stem}/")
     man = mf.utils.ScriptManager(os.path.realpath(__file__), output_dir)
     man.save_pickle(cfg, "cfg.pkl")
     man.save_script_copy()
-
+    
     
     # Data
     # --------------------------------------------------------------------------------------

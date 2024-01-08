@@ -1,0 +1,7 @@
+epochs: 10
+batch_size: 1000000
+
+omega: 0.5
+method: integrate
+
+dmax: 7.50e-04

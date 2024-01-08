@@ -16,9 +16,8 @@ import setup
 
 @hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_nn.yaml")
 def main(cfg: DictConfig):
-    for key in cfg:
-        print(key)
-
+    print(cfg)
+    
     path = pathlib.Path(__file__)
     output_dir = os.path.join(path.parent.absolute(), f"./output/{cfg.data.name}/")
     man = mf.utils.ScriptManager(os.path.realpath(__file__), output_dir)

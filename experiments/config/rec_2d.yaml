@@ -1,7 +1,3 @@
-defaults:
-    - base
-    - _self_
-
 data:
     name: "two-spirals"
     decorr: false

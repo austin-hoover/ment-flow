@@ -1,6 +1,9 @@
 defaults:
+    - base
+    - model: flow
+    - gen: flow
+    - train: flow
     - rec_2d
-    - base_flow
     - _self_
 
 gen:

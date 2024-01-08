@@ -1,0 +1,17 @@
+epochs: 20
+iters: 300
+batch_size: 30000
+
+penalty: 0.0
+penalty_step: 20.0
+penalty_scale: 1.1
+penalty_max: null
+
+lr: 0.005
+lr_min: 0.001
+lr_drop: 0.1
+lr_patience: 400
+
+rtol: 0.0
+atol: 0.0
+dmax: 7.50e-04
