@@ -25,7 +25,11 @@ import setup
 
 @hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_ment.yaml")
 def main(cfg: DictConfig):
-    print(cfg)
+
+    print(f"Working directory : {os.getcwd()}")
+    print(f"Output directory  : {hydra.core.hydra_config.HydraConfig.get().runtime.output_dir}")
+    
+    # print(cfg)
 
     
     # Output paths
@@ -64,7 +68,7 @@ def main(cfg: DictConfig):
         d=2,
         transforms=transforms,
         measurements=measurements,
-        diagnostics=diagnostics[0],  # for now
+        diagnostics=diagnostics,
         discrepancy_function=cfg.model.disc,
         prior=prior,
         sampler=sampler,
@@ -134,8 +138,8 @@ def main(cfg: DictConfig):
         x_pred = model.sample(cfg.eval.size)
     
         # Compute simulation-measurement discrepancy
-        predictions = mf.sim.forward(x_pred, transforms, diagnostics)        
-        discrepancy_vector = model.discrepancy(predictions)
+        predictions = mf.sim.forward(x_pred, transforms, diagnostics)      
+        discrepancy_vector = model.discrepancy_vector(predictions)
         discrepancy = sum(discrepancy_vector) / len(discrepancy_vector)
     
         # Compute sliced wasserstein distance between true and model samples.
