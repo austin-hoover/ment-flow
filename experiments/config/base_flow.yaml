@@ -2,6 +2,11 @@ defaults:
     - base
     - _self_
 
+model:
+    prior_scale: 1.0
+    disc: "kld"
+    entest: "mc"
+
 gen:
     name: "nsf"
     hidden_layers: 3

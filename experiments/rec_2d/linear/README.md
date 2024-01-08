@@ -12,5 +12,5 @@ This will saved model parameters, config files, and figures to `/experiments/rec
 * `train_flow.py`: train MENT-Flow model 
 * `train_ment.py`: train MENT model
 * `eval_flow.ipynb`: evaluate MENT-Flow model
-* `eval_ment.ipynb`: evaluate MENT model
+* `eval_ment.ipynb`: evaluate MENT model (to do)
 * `setup.py`: contains setup functions used in training scripts

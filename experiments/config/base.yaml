@@ -1,11 +1,6 @@
 seed: null
 device: "cpu"
 
-model:
-    prior_scale: 1.0
-    disc: "kld"
-    entest: "mc"
-
 train:
     epochs: 20
     iters: 300

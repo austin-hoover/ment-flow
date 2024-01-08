@@ -161,7 +161,4 @@ def rotation_matrix(angle):
 def reverse_momentum(x):
     for i in range(0, x.shape[1], 2):
         x[:, i + 1] *= -1.0
-    x = self.forward(x)
-    for i in range(0, x.shape[1], 2):
-        x[:, i + 1] *= -1.0
     return x

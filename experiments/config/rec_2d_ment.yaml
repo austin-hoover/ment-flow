@@ -1,0 +1,10 @@
+defaults:
+    - rec_2d
+    - base_ment
+    - _self_
+
+train:
+    dmax: 7.50e-04
+
+eval:
+    swd: True

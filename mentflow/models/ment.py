@@ -119,9 +119,6 @@ class UniformPrior:
 class MENT:
     """MENT reconstruction model.
 
-    This should work for any dimension d and projected dimension d', but it has only
-    been tested for d = 2, d' = 1.
-
     Parameters
     ----------
     d : int
@@ -129,7 +126,7 @@ class MENT:
     transforms : list[callable]
         `transforms[i](x)` maps the input d-dimensional coordinates x to the ith
         measurement location.
-    diagnostics : list[callable]
+    diagnostics : list[list[callable]]
         Histogram diagnostics to apply after each transform. 
         Must implement `diagnostic(x)`, producting measurement data. 
         Must have the following parameters:
@@ -165,7 +162,7 @@ class MENT:
         self,
         d: int,
         transforms: List[Callable],
-        diagnostics: List[Callable],
+        diagnostics: List[List[Callable]],
         measurements: List[List[torch.Tensor]],
         discrepancy_function: str = "kld",
         prior: Any = None,
@@ -199,7 +196,7 @@ class MENT:
         """Send tensor to torch device."""
         return x.type(torch.float32).to(self.device)
 
-    def set_diagnostics(self, diagnostics: List[Callable]):
+    def set_diagnostics(self, diagnostics: List[List[Callable]]):
         """Set the diagnostics."""
         self.diagnostics = diagnostics
         if self.diagnostics is not None:

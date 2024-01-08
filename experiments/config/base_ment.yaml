@@ -1,0 +1,23 @@
+seed: null
+device: "cpu"
+
+model:
+    prior: "gaussian"
+    prior_scale: 1.0
+    method: "integrate"
+    interp: "linear"
+    disc: "kld"
+
+train:
+    epochs: 10
+    omega: 0.5
+
+eval:
+    freq: null
+    size: 1000000
+    bins: 125
+    xmax: 3.5
+
+fig:
+    ext: "png"
+    dpi: 300

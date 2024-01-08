@@ -84,6 +84,8 @@ def plot_proj_1d(
 
 def plot_dist_2d(x1, x2, fig_kws=None, **kws):
     """Plots two-dimensional histograms side-by-side."""
+    if fig_kws is None:
+        fig_kws = dict()
     fig_kws.setdefault("xspineloc", "neither")
     fig_kws.setdefault("yspineloc", "neither")
     fig_kws.setdefault("space", 0.0)

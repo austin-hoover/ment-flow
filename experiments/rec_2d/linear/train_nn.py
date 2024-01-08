@@ -10,9 +10,7 @@ import zuko
 from omegaconf import DictConfig
 
 import mentflow as mf
-from mentflow.utils import unravel
 
-# local
 import setup
 
 
