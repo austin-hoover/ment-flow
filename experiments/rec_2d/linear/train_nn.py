@@ -14,9 +14,6 @@ import mentflow as mf
 import setup
 
 
-mf.train.plot.set_proplot_rc()
-
-
 @hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_nn.yaml")
 def main(cfg: DictConfig):
     for key in cfg:

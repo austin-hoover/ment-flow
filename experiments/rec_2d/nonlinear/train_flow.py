@@ -1,4 +1,4 @@
-"""Train 2D normalizing flow on linear 1D projection."""
+"""Train 2D normalizing flow on nonlinear 1D projection."""
 import os
 import pathlib
 from typing import Callable

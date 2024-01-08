@@ -23,9 +23,6 @@ from mentflow.utils import unravel
 import setup
 
 
-mf.train.plot.set_proplot_rc()
-
-
 @hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_ment.yaml")
 def main(cfg: DictConfig):
     print(cfg)
