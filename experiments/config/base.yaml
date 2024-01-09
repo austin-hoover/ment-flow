@@ -1,13 +1,15 @@
 seed: null
 device: "cpu"
 
-fig:
-    ext: "png"
-    dpi: 300
-
 eval:
     freq: null
+    size: 50000
+    disc: "kld"  # discrepancy (y_meas, y_model)
+    dist: "swd"  # distance between (x_meas, x_model)
+    xmax: 3.5
+
+plot:
     size: 1000000
     bins: 125
-    xmax: 3.5
-    swd: true
+    ext: "png"
+    dpi: 300

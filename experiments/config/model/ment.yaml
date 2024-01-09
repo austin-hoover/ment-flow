@@ -1,5 +1,13 @@
 disc: "kld"
 prior: "gaussian"
 prior_scale: 1.0
-method: "integrate"
 interp: "linear"
+
+mode: "integrate"
+
+integration_xmax: 3.5
+integration_res: 300
+
+sampler: "grid"
+sampler_xmax: null
+sampler_res: 200

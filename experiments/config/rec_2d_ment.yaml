@@ -1,9 +1,0 @@
-defaults:
-    - base
-    - model: ment
-    - train: ment
-    - rec_2d
-    - _self_
-
-model:
-    d: 2

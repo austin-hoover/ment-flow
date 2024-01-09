@@ -1,0 +1,5 @@
+num: 6
+xmax: 3.5
+bins: 85
+noise_scale: 0.0
+noise_type: "gaussian"

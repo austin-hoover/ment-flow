@@ -1,12 +1,9 @@
-"""Train 2D neural network generator on linear 1D projection."""
 import os
 import pathlib
-from typing import Callable
 
 import hydra
 import numpy as np
 import torch
-import zuko
 from omegaconf import DictConfig
 
 import mentflow as mf
@@ -14,12 +11,12 @@ import mentflow as mf
 import setup
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_nn.yaml")
+@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_linear_nn.yaml")
 def main(cfg: DictConfig):
     print(cfg)
-    
+
     path = pathlib.Path(__file__)
-    output_dir = os.path.join(path.parent.absolute(), f"./output/{cfg.data.name}/")
+    output_dir = os.path.join(path.parent.absolute(), f"./output/")
     man = mf.utils.ScriptManager(os.path.realpath(__file__), output_dir)
     man.save_pickle(cfg, "cfg.pkl")
     man.save_script_copy()
@@ -38,7 +35,7 @@ def main(cfg: DictConfig):
         measurements=measurements,
     )
 
-    setup.setup_and_run_trainer(
+    setup.train_model(
         cfg,
         model=model,
         setup_plot=setup.setup_plot,

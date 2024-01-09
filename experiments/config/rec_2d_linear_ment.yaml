@@ -1,0 +1,14 @@
+defaults:
+    - dist: synth_2d
+    - meas: default
+    - model: ment
+    - train: ment
+    - base
+    - _self_
+
+model:
+    d: 2
+
+meas:
+    min_angle: 0.0
+    max_angle: 180.0

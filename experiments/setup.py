@@ -47,9 +47,9 @@ def setup_model(
     )
     model = model.to(device)
     return model
-    
-    
-def setup_and_run_trainer(
+
+
+def train_model(
     cfg: DictConfig,
     model: Type[torch.nn.Module],
     setup_plot: Optional[Callable] = None,
@@ -102,9 +102,9 @@ def setup_and_run_trainer(
         penalty_scale=cfg.train.penalty_scale,
         penalty_max=cfg.train.penalty_max,
         eval_freq=cfg.eval.freq,
-        savefig_kws=dict(ext=cfg.fig.ext, dpi=cfg.fig.dpi),
+        savefig_kws=dict(ext=cfg.plot.ext, dpi=cfg.plot.dpi),
     )
-    
+
 
 def generate_training_data(
     cfg: DictConfig, 
@@ -129,7 +129,7 @@ def generate_training_data(
 
     # Generate samples from input distribution.
     dist = make_dist(cfg)
-    x = dist.sample(cfg.data.size)
+    x = dist.sample(cfg.dist.size)
     x = send(x)
 
     # Simulate measurements.
@@ -142,3 +142,78 @@ def generate_training_data(
         diagnostic.kde = True
 
     return (transforms, diagnostics, measurements)
+
+
+def setup_model_ment(
+    cfg: DictConfig, 
+    transforms=None,
+    diagnostics=None,
+    measurements=None,
+):
+    """Setup MENT model from config."""
+    d = cfg.model.d
+    
+    prior = None
+    if cfg.model.prior == "gaussian":
+        prior = mf.alg.ment.GaussianPrior(d=d, scale=cfg.model.prior_scale)
+    if cfg.model.prior == "uniform":
+        prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale))
+
+    sampler = None
+    if cfg.model.sampler == "grid":
+        grid_xmax = cfg.model.sampler_xmax
+        if grid_xmax is None:
+            grid_xmax = cfg.eval.xmax
+        grid_limits = d * [(-grid_xmax, grid_xmax)]
+        grid_res = cfg.model.sampler_res
+        sampler = mf.sample.GridSampler(limits=grid_limits, res=grid_res)
+
+    integration_grid_limits = [(-cfg.model.integration_xmax, +cfg.model.integration_xmax)]
+    integration_grid_shape = (cfg.model.integration_res,)
+    
+    model = mf.alg.ment.MENT(
+        d=d,
+        transforms=transforms,
+        measurements=measurements,
+        diagnostics=diagnostics,
+        discrepancy_function=cfg.model.disc,
+        prior=prior,
+        sampler=sampler,
+        interpolate=cfg.model.interp,
+        mode=cfg.model.mode,
+        integration_grid_limits=integration_grid_limits,
+        integration_grid_shape=integration_grid_shape,
+        n_samples=cfg.train.batch_size,
+    )
+    return model
+
+
+def train_model_ment(
+    cfg=None,
+    model=None,
+    setup_plot=None,
+    setup_eval=None,
+    output_dir=None,
+) -> None:
+    """Set up MENT trainer from config, then train the model."""
+    if cfg.seed is not None:
+        torch.manual_seed(cfg.seed)
+    
+    plot = None
+    if setup_plot is not None:
+        plot = setup_plot(cfg)
+        
+    eval = None
+    if setup_eval is not None:
+        eval = setup_eval(cfg)
+   
+    trainer = mf.train.MENTTrainer(
+        model=model,
+        eval=eval,
+        plot=plot,
+        output_dir=output_dir,
+    )
+    trainer.train(
+        epochs=cfg.train.epochs, 
+        omega=cfg.train.omega,
+    )
