@@ -1,8 +1,8 @@
 """Radial (spherically symmetric) distributions."""
 import numpy as np
 
-from mentflow.data.distribution import Distribution
-from mentflow.data.distribution import decorrelate
+from mentflow.dist import Distribution
+from mentflow.dist import decorrelate
 
 
 class Gaussian(Distribution):

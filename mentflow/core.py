@@ -110,6 +110,12 @@ class MENTFlow(Model, nn.Module):
         H = self.entropy_estimator(x, log_prob)
         return (x, H)
 
+    def discrepancy_vector(self, predictions: List[List[torch.Tensor]]) -> List[torch.Tensor]:
+        discrepancy_vector = []
+        for pred, meas in zip(unravel(predictions), unravel(self.measurements)):
+            discrepancy_vector.append(self.discrepancy_function(pred, meas))
+        return discrepancy_vector
+
     def loss(self, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
         """Estimate the loss from a new batch.
 
@@ -131,12 +137,8 @@ class MENTFlow(Model, nn.Module):
             The discrepancy vector.
         """
         x, H = self.sample_and_entropy(batch_size)
-
         predictions = self.sim.forward(x)
-        D = []
-        for pred, meas in zip(unravel(predictions), unravel(self.measurements)):
-            D.append(self.discrepancy_function(pred, meas))
-        
+        D = self.discrepancy_vector(predictions)
         L = H + self.penalty_parameter * (sum(D) / len(D))
         return (L, H, D)
 

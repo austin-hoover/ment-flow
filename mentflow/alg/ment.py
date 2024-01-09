@@ -158,6 +158,15 @@ class MENT:
             - "nearest": nearest neighbor (scipy.interpolate.NearestNDInterpolator).
             - "linear": linear interpolation (scipy.interpolate.LinearNDInterpolator).
             - "pchip": 1D monotonic cubic splines (scipy.interpolate.PchipInterpolator).
+    mode: {"integrate", "sample"}
+        Whether to use numerical integration or sampling + particle tracking to 
+        compute projections.
+    integration_grid_limits : list[tuple[float]]
+        The integration grid limits.
+    integration_grid_shape : tuple[int]
+        The integration grid shape.
+    n_samples : int
+        The number of samples to draw if mode="sample".
 
     Attributes
     ----------
@@ -181,8 +190,12 @@ class MENT:
         discrepancy_function: str = "kld",
         prior: Any = None,
         interpolate: str = "linear",
+        mode: str = "integrate",
         sampler: Optional[Callable] = None,
         device: Optional[torch.device] = None,
+        integration_grid_limits: List[Tuple[float]] = None,
+        integration_grid_shape: Tuple[int] = None,
+        n_samples: int = 1000000,
     ) -> None:
         """Constructor."""
         self.device = device
@@ -192,6 +205,7 @@ class MENT:
         self.d = d
         self.epoch = 0
         self.interpolate = interpolate
+        self.mode = mode
 
         self.transforms = transforms
         self.diagnostics = self.set_diagnostics(diagnostics)
@@ -204,6 +218,10 @@ class MENT:
 
         self.lagrange_functions = self.initialize_lagrange_functions()
         self.sampler = sampler
+
+        self.integration_grid_limits = integration_grid_limits
+        self.integration_grid_shape = integration_grid_shape
+        self.n_samples = n_samples
 
     def send(self, x):
         """Send tensor to torch device."""
@@ -275,10 +293,11 @@ class MENT:
             points = get_grid_points_torch(*coords)
         return points
 
-    def get_integration_points(
-        self, index: int, limits: List[Tuple[float]], shape: Tuple[float]
-    ) -> torch.Tensor:
+    def get_integration_points(self, index: int) -> torch.Tensor:
         """Return integration points in ith transformed space."""
+        limits = self.integration_grid_limits
+        shape = self.integration_grid_shape
+        
         diagnostic = self.diagnostics[index][0]
         meas_axis = diagnostic.axis
         if type(meas_axis) is int:
@@ -349,9 +368,7 @@ class MENT:
             discrepancy_vector.append(discrepancy)
         return discrepancy_vector
 
-    def _simulate_integrate(
-        self, index: int, limits: List[Tuple[float]], shape: Tuple[int], **kws
-    ) -> torch.Tensor:
+    def _simulate_integrate(self, index: int) -> torch.Tensor:
         """Simulate projection by numerically integrating the distribution function.
 
         Parameters
@@ -368,6 +385,9 @@ class MENT:
         tensor
             The projection onto the measurement axis.
         """
+        limits = self.integration_grid_limits
+        shape = self.integration_grid_shape
+        
         transform = self.transforms[index]
         diagnostic = self.diagnostics[index][0]
 
@@ -381,7 +401,7 @@ class MENT:
 
         # Get measurement and integration points.
         meas_points = self.get_meas_points(index)
-        int_points = self.get_integration_points(index=index, limits=limits, shape=shape)
+        int_points = self.get_integration_points(index=index)
 
         # Initialize transformed coordinates u.
         u = torch.zeros((int_points.shape[0], self.d))
@@ -415,22 +435,20 @@ class MENT:
         prediction = self._normalize_projection(prediction, index)
         return prediction
 
-    def _simulate_sample(self, index: int, n: int = 100000, **kws) -> torch.Tensor:
+    def _simulate_sample(self, index: int) -> torch.Tensor:
         """Compute projection by sampling and tracking particles.
 
         Parameters
         ----------
         index : int
             The transform index.
-        n : int
-            The number of particles to sample.
 
         Returns
         -------
         list[tensor]
             The projections onto the measurement axis.
         """
-        x = self.sample(int(n))
+        x = self.sample(int(self.n_samples))
         x = self.send(x)
         transform = self.transforms[index]
         diagnostic = self.diagnostics[index][0]
@@ -438,25 +456,13 @@ class MENT:
         prediction = self._normalize_projection(prediction, index=index)
         return prediction
 
-    def _simulate(self, index: int, method: str = "integrate", **kws) -> torch.Tensor:
+    def _simulate(self, index: int) -> torch.Tensor:
         """Compute the ith projection.
 
         Parameters
         ----------
         index : int
             The transform index.
-        method : {"integrate", "sample"}
-            Method to compute the projections of the distribution.
-            - "integrate":
-                Compute the density on a regular grid in the transformed space; evaluate
-                the density on the grid using Jacobian determinant of transfer map.
-            - "sample":
-                Sample particles from the distribution, track the particles using the
-                specified transform function, and estimate the projected density
-                using `self.diagnostic`.
-        **kws
-            Key word arguments passed to `self._simulate_integrate` (if method="integrate")
-            or `self._simulate_sample` (if method="sample").
 
         Returns
         -------
@@ -467,10 +473,10 @@ class MENT:
             "integrate": self._simulate_integrate,
             "sample": self._simulate_sample,
         }
-        _function = _functions[method]
-        return _function(index, **kws)
+        _function = _functions[self.mode]
+        return _function(index)
 
-    def gauss_seidel_iterate(self, omega=1.0, sim_method="integrate", **sim_method_kws) -> None:
+    def gauss_seidel_iterate(self, omega=1.0) -> None:
         """Execute Gauss-Seidel iteration to update lagrange functions.
 
         Parameters
@@ -478,14 +484,10 @@ class MENT:
         omega : float
             Damping parameter in range (0.0, 1.0]. This acts as a learning rate.
             h -> h * (1 + omega * ((g / g*) - 1))
-        sim_method : str
-            Simulation method {"integrate", "sample"}.
-        **sim_method_kws
-            Key word arguments passed to `self._simulate`.
-        """
+        """ 
         for index, transform in enumerate(self.transforms):
             # Get simulated projection, measured projection, and lagrange function.
-            prediction = self._simulate(index=index, method=sim_method, **sim_method_kws)
+            prediction = self._simulate(index)
             measurement = self.measurements[index][0]
             lagrange_function = self.lagrange_functions[index][0]
 
@@ -502,16 +504,16 @@ class MENT:
 
         self.epoch += 1
 
-    def simulate(self, method="integrate", **kws):
+    def simulate(self, **sim_kws):
         """Simulate all projections."""
         predictions = []
-        if method == "integrate":
+        if self.mode == "integrate":
             for index, transform in enumerate(self.transforms):
                 predictions.append([])
                 for diagnostic in self.diagnostics[index][:1]:
-                    prediction = self._simulate_integrate(index, **kws)
+                    prediction = self._simulate_integrate(index, **sim_kws)
                     predictions[-1].append(prediction)
-        elif method == "sample":
+        elif self.mode == "sample":
             n = kws.get("n", 100000)
             x = self.sample(n)
             x = self.send(x)

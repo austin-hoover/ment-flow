@@ -5,8 +5,8 @@ from typing import Optional
 import numpy as np
 import torch
 
-from mentflow.diagnostics.histogram import kde_histogram_1d
-from mentflow.diagnostics.histogram import kde_histogram_2d
+from mentflow.diag.hist import kde_histogram_1d
+from mentflow.diag.hist import kde_histogram_2d
 from mentflow.utils import coords_from_edges
 from mentflow.utils import unravel
 

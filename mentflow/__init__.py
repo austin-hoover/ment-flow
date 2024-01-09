@@ -1,13 +1,12 @@
-from mentflow.core import *
-import mentflow.analysis
-import mentflow.data
-import mentflow.diagnostics
-import mentflow.entropy
-import mentflow.gen
-import mentflow.loss
-import mentflow.models
-import mentflow.sim
-import mentflow.train
-import mentflow.transform
-import mentflow.types_
-import mentflow.utils
+from .core import *
+from . import alg
+from . import diag
+from . import dist
+from . import entropy
+from . import gen
+from . import loss
+from . import sample
+from . import sim
+from . import train
+from . import types_
+from . import utils

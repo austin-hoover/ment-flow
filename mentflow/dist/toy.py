@@ -6,12 +6,12 @@ import numpy as np
 import scipy.stats
 import skimage as ski
 
-from mentflow.data import radial
-from mentflow.data.distribution import Distribution
-from mentflow.data.distribution import normalize
-from mentflow.data.radial import Gaussian
-from mentflow.data.radial import Hollow
-from mentflow.data.radial import Rings
+from mentflow.dist import radial
+from mentflow.dist.dist import Distribution
+from mentflow.dist.dist import normalize
+from mentflow.dist.radial import Gaussian
+from mentflow.dist.radial import Hollow
+from mentflow.dist.radial import Rings
 from mentflow.sample import sample_hist
 
 
