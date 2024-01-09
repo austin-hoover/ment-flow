@@ -18,7 +18,6 @@ from mentflow.utils.logging import ListLogger
 
 
 class Trainer:
-    """"MENT-Flow model trainer."""
     def __init__(
         self,
         model: MENTFlow,
@@ -29,6 +28,7 @@ class Trainer:
         output_dir=None,
         notebook=False,
     ) -> None:
+        
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
@@ -201,8 +201,8 @@ class Trainer:
                     with torch.no_grad():
                         curr_state_dict = self.model.state_dict()
                         self.model.load_state_dict(best_state_dict)
+                        self.eval_model(epoch, iteration)
                         self.plot_model(epoch, iteration, **savefig_kws)
-                        self.eval_model(epoch, iteration)                        
                         self.model.load_state_dict(curr_state_dict)
                     self.model.train()
 
@@ -220,7 +220,7 @@ class Trainer:
         D_norm_old = float("inf")
         self.model.penalty_parameter = penalty_start
         
-        for epoch in range(epochs):            
+        for epoch in range(epochs):     
             print("epoch = {:}".format(epoch))
             print("penalty = {:}".format(self.model.penalty_parameter))
 
@@ -244,7 +244,6 @@ class Trainer:
             print("D_norm_old = {:0.3e}".format(D_norm_old))
             print("D_norm_abs_change = {:0.3e}".format(D_norm - D_norm_old))
             print("D_norm_rel_change = {:0.3e}".format(D_norm_old / D_norm))
-            print()
 
             # Check if convergence.
             if D_norm <= dmax:
@@ -278,3 +277,46 @@ class Trainer:
         
         # Before leaving, load the best state dict from the last epoch.
         self.model.load_state_dict(best_state_dict)
+
+
+
+
+class MENTTrainer(Trainer):
+    """Trainer for MENT model."""
+    def __init__(
+        self, 
+        model=None,
+        plot=None,
+        eval=None,
+        output_dir=None,
+        notebook=False,
+    ) -> None:
+        super().__init__(
+            model=model,
+            plot=plot,
+            eval=eval,
+            output_dir=output_dir,
+            notebook=notebook,
+            optimizer=None,
+            lr_scheduler=None,
+        )
+
+    def train(
+        self, 
+        epochs: int, 
+        omega: float = 0.5, 
+        savefig_kws: Optional[dict] = None,
+    ):
+        """Perform Gauss-Seidel iterations."""
+        if not savefig_kws:
+            savefig_kws = dict()
+        savefig_kws.setdefault("dpi", 300)
+        
+        for epoch in range(epochs + 1):
+            print("epoch = {}".format(epoch))
+            iteration = 0
+            self.eval_model(epoch, iteration)
+            self.plot_model(epoch, iteration, **savefig_kws)        
+            if epoch < epochs:
+                self.model.gauss_seidel_iterate(omega=omega)
+        
