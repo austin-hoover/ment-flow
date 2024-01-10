@@ -16,7 +16,7 @@ def main(cfg: DictConfig):
     print(cfg)    
     
     path = pathlib.Path(__file__)
-    output_dir = os.path.join(path.parent.absolute(), f"./output/{path.stem}/")
+    output_dir = os.path.join(path.parent.absolute(), f"./output/")
     man = mf.utils.ScriptManager(os.path.realpath(__file__), output_dir)
     man.save_pickle(cfg, "cfg.pkl")
     man.save_script_copy()

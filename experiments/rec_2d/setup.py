@@ -23,7 +23,8 @@ def make_diagnostic(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
         axis=0, 
         bin_edges=bin_edges, 
         noise_scale=cfg.meas.noise_scale, 
-        noise_type=cfg.meas.noise_type
+        noise_type=cfg.meas.noise_type,
+        bandwidth=cfg.meas.bandwidth,
     )
     diagnostic = diagnostic.to(device)
     return diagnostic
