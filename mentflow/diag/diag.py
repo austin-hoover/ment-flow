@@ -77,7 +77,7 @@ class Histogram1D(Histogram):
         self.register_buffer("bin_coords", coords_from_edges(self.bin_edges))
         self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
         if bandwidth is None:
-            bandwidth = 1.0
+            bandwidth = 0.5
         self.register_buffer("bandwidth", bandwidth * self.resolution)
         self.kde = kde
 
@@ -137,9 +137,9 @@ class Histogram2D(Histogram):
         self.d = d = len(axis)
         self.bandwidth = bandwidth
         if self.bandwidth  is None:
-            self.bandwidth  = d * [1.0]
+            self.bandwidth  = d * [0.5]
         if type(self.bandwidth ) in [float, int]:
-            self.bandwidth  = d * [self.bandwidth ]
+            self.bandwidth  = d * [self.bandwidth]
         self.bandwidth = [self.bandwidth [i] * self.resolution[i] for i in range(d)]
         self.kde = kde
 
