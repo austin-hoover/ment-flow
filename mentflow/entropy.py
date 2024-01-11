@@ -64,13 +64,11 @@ class MonteCarloEntropyEstimator(EntropyEstimator):
         
 
 def get_entropy_estimator(name, **kws):
-    constructors = {
-        None: EmptyEntropyEstimator,
-        False: EmptyEntropyEstimator,
-        "none": EmptyEntropyEstimator,
-        "cov": CovarianceEntropyEstimator,
-        "knn": KNNEntropyEstimator,
-        "mc": MonteCarloEntropyEstimator,
-    }
-    constructor = constructors[name]
+    constructor = EmptyEntropyEstimator
+    if name == "cov": 
+        constructor = CovarianceEntropyEstimator
+    elif name == "knn": 
+        constructor = KNNEntropyEstimator
+    elif name == "mc":
+        constructor = MonteCarloEntropyEstimator
     return constructor(**kws)
