@@ -536,7 +536,7 @@ class MENT:
         }
         torch.save(state, path)
 
-    def load(self, path, device) -> None:
+    def load(self, path, device=None):
         state = torch.load(path, map_location=device)
 
         self.lagrange_functions = state["lagrange_functions"]
