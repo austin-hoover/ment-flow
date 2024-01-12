@@ -156,7 +156,7 @@ class MENTFlow(Model, nn.Module):
         }
         torch.save(state, path)
 
-    def load(self, path, device) -> None:
+    def load(self, path, device=None):
         state = torch.load(path, map_location=device)
         try:
             self.gen.load_state_dict(state["gen"])
