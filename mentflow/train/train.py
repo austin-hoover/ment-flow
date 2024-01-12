@@ -1,4 +1,3 @@
-"""Training helpers."""
 import copy
 import os
 import time
@@ -53,6 +52,12 @@ class Trainer:
         if ext is not None:
             filename = f"{filename}.{ext}"
         return filename
+
+    def get_progress_bar(self, length):
+        if self.notebook:
+            return tqdm_nb(total=length)
+        else:
+            return tqdm(total=length)
     
     def plot_model(self, epoch: int, iteration: int, **savefig_kws) -> None:
         if self.plot is None:
@@ -78,12 +83,6 @@ class Trainer:
         path = os.path.join(self.checkpoint_dir, path)
         print(f"Saving file {path}")
         self.model.save(path)
-
-    def get_progress_bar(self, length):
-        if self.notebook:
-            return tqdm_nb(total=length)
-        else:
-            return tqdm(total=length)
 
     def train(
         self,
@@ -149,7 +148,7 @@ class Trainer:
         logger = ListLogger(path=path)
 
         start_time = time.time()
-
+        
         
         def train_epoch(epoch):   
             """Inner loop (fixed penalty parameter)."""
@@ -306,15 +305,34 @@ class MENTTrainer(Trainer):
         epochs: int, 
         omega: float = 0.5, 
         savefig_kws: Optional[dict] = None,
-    ):
+    ) -> None:
         """Perform Gauss-Seidel iterations."""
         if not savefig_kws:
             savefig_kws = dict()
         savefig_kws.setdefault("dpi", 300)
+
+        path = None
+        if self.output_dir is not None:
+            path = os.path.join(self.output_dir, "history.pkl")
+        logger = ListLogger(path=path)
+
+        iteration = 0
+        start_time = time.time()
         
         for epoch in range(epochs + 1):
             print("epoch = {}".format(epoch))
-            iteration = 0
+
+            # Log info.
+            # (I think `eval_model` should return a dict with the data fit error and
+            # the statistical distance from the true distribution. Then we can 
+            # print those numbers here. Same goes for `Trainer`.)
+            info = dict()
+            info["epoch"] = epoch
+            info["iteration"] = iteration
+            info["time"] = time.time() - start_time
+            info["D_norm"] = None
+            logger.write(info)
+        
             self.eval_model(epoch, iteration)
             self.plot_model(epoch, iteration, **savefig_kws)        
             if epoch < epochs:
