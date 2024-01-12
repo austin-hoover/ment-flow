@@ -58,7 +58,7 @@ class Model:
         """Save model to file_path."""
         raise NotImplementedError
 
-    def load(self, path, map_location) -> None:
+    def load(self, path, map_location=None) -> None:
         """Load model from file_path."""
         raise NotImplementedError
         
