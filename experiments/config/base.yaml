@@ -1,15 +1,28 @@
+timestamp: ${now:%y%m%d%H%M%S}
 seed: null
-device: "cpu"
+device: cpu
+
+hydra:
+    run:
+        dir: ./outputs/${hydra.job.name}/${timestamp}
+    callbacks:
+        save_job_info:
+            _target_: hydra.experimental.callbacks.PickleJobInfoCallback
+        save_git_info:
+            _target_: experiments.callback.GitSHACallback
+    output_subdir: ".hydra"
 
 eval:
     freq: null
     size: 50000
-    disc: "kld"  # discrepancy (y_meas, y_model)
-    dist: "swd"  # distance between (x_meas, x_model)
+    disc: kld  # discrepancy (y_meas, y_model)
+    dist: swd  # distance between (x_meas, x_model)
     xmax: 3.5
 
 plot:
     size: 1000000
     bins: 125
-    ext: "png"
+    ext: png
     dpi: 300
+
+d: 2

@@ -4,8 +4,10 @@ from omegaconf import DictConfig
 
 import mentflow as mf
 
-from experiments.setup import setup_model
-from experiments.setup import setup_and_run_trainer
+from experiments.setup import setup_mentflow_model
+from experiments.setup import train_mentflow_model
+from experiments.setup import setup_ment_model
+from experiments.setup import train_ment_model
 from experiments.setup import generate_training_data
 from experiments.rec_2d.setup import make_diagnostic
 from experiments.rec_2d.setup import make_dist

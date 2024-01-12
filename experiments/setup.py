@@ -7,12 +7,13 @@ from typing import Type
 import torch
 import zuko
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import mentflow as mf
 from mentflow import unravel
 
 
-def setup_model(
+def setup_mentflow_model(
     cfg: DictConfig, 
     transforms=None,
     diagnostics=None,
@@ -20,15 +21,17 @@ def setup_model(
 ):
     """Setup MENTFlow model from config."""
     
-    device = torch.device(cfg.device)
-    send = lambda x: x.type(torch.float32).to(device)
+    send = lambda x: x.type(torch.float32).to(cfg.device)
 
     # Build generative model.
-    gen = mf.gen.build_gen(device=device, **cfg.gen)
-    gen = gen.to(device)
+    build_gen_kws = OmegaConf.to_container(cfg.gen)
+    build_gen_kws["input_features"]  = cfg.d
+    build_gen_kws["output_features"] = cfg.d
+    gen = mf.gen.build_gen(device=cfg.device, **build_gen_kws)
+    gen = gen.to(cfg.device)
 
     # Set Gaussian prior width.
-    d = cfg.gen.output_features
+    d = build_gen_kws["output_features"]
     prior = zuko.distributions.DiagNormal(
         send(torch.zeros(d)),
         send(cfg.model.prior_scale * torch.ones(d)),
@@ -45,11 +48,11 @@ def setup_model(
         penalty_parameter=0.0,
         discrepancy_function=cfg.model.disc,
     )
-    model = model.to(device)
+    model = model.to(cfg.device)
     return model
 
 
-def train_model(
+def train_mentflow_model(
     cfg: DictConfig,
     model: Type[torch.nn.Module],
     setup_plot: Optional[Callable] = None,
@@ -144,14 +147,14 @@ def generate_training_data(
     return (transforms, diagnostics, measurements)
 
 
-def setup_model_ment(
+def setup_ment_model(
     cfg: DictConfig, 
     transforms=None,
     diagnostics=None,
     measurements=None,
 ):
     """Setup MENT model from config."""
-    d = cfg.model.d
+    d = cfg.d
     
     prior = None
     if cfg.model.prior == "gaussian":
@@ -188,7 +191,7 @@ def setup_model_ment(
     return model
 
 
-def train_model_ment(
+def train_ment_model(
     cfg=None,
     model=None,
     setup_plot=None,

@@ -1,16 +1,14 @@
 defaults:
+    - base
     - dist: synth_2d
     - meas: default
-    - model: flow
-    - train: flow
-    - gen: flow
-    - base
+    - gen: nsf
+    - model: ${gen}
+    - train: ${gen}
     - _self_
-
-gen:
-    input_features: 2
-    output_features: 2
 
 meas:
     min_angle: 0.0
     max_angle: 180.0
+
+d: 2
