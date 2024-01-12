@@ -1,5 +1,4 @@
 """https://github.com/lollcat/fab-torch/blob/master/fab/utils/logging.py"""
-
 import abc
 import pathlib
 import pickle
