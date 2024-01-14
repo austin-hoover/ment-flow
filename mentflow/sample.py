@@ -59,9 +59,7 @@ class GridSampler:
         self.limits = limits
         self.d = len(limits)
         self.initialize(limits=limits, res=res)
-
-    def send(self, x):
-        return x.type(torch.float32).to(self.device)
+        self.to(device)
 
     def initialize(self, limits=None, res=None):
         if limits is not None:
@@ -73,9 +71,17 @@ class GridSampler:
             torch.linspace(self.limits[i][0], self.limits[i][1], self.res + 1) 
             for i in range(self.d)
         ]
-        self.grid_edges = [self.send(e) for e in self.grid_edges]
         self.grid_coords = [0.5 * (e[:-1] + e[1:]) for e in self.grid_edges]
         self.shape = self.d * [self.res]
+
+    def send(self, x):
+        return x.type(torch.float32).to(self.device)
+
+    def to(self, device):
+        self.device = device
+        self.grid_edges = [self.send(e) for e in self.grid_edges]
+        self.grid_coords = [self.send(c) for c in self.grid_coords]
+        return self
 
     def get_mesh(self) -> List[torch.Tensor]:
         return torch.meshgrid(*self.grid_coords, indexing="ij")

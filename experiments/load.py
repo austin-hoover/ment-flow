@@ -31,13 +31,14 @@ def epoch_and_iteration_number(checkpoint_filename):
     return epoch, iteration
 
 
-def setup_ment_model(cfg: DictConfig) -> mf.MENTFlow:
+def setup_ment_model(cfg: DictConfig, device=None) -> mf.MENTFlow:
     """Setup empty MENT model."""
     model = mf.alg.MENT(
         d=cfg.d,
         transforms=[],
         diagnostics=[],
         measurements=[],
+        device=device,
     )
     return model
 
@@ -51,8 +52,8 @@ def load_mentflow_model(cfg: dict, checkpoint_path: str, device=None) -> mf.MENT
 
 def load_ment_model(cfg: dict, checkpoint_path: str, device=None) -> mf.alg.MENT:
     """Load MENT model (from cfg) and parameters (from checkpoint_path)."""
-    model = setup_ment_model(cfg)
-    model.load(checkpoint_path, device)
+    model = setup_ment_model(cfg, device=device)
+    model.load(checkpoint_path, device=device)
     return model
 
 

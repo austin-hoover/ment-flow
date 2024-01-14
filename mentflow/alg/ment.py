@@ -89,15 +89,24 @@ def interpolate_dd(
 class GaussianPrior:
     """Gaussian prior distribution."""
     def __init__(self, d=2, scale=1.0, device=None):
-        loc = torch.zeros(d)
-        loc = loc.type(torch.float32)
-        loc = loc.to(device)
+        self.d = d
+        self.scale = scale
+        self.device = device
+        self._initialize()
+
+    def _initialize(self):
+        loc = torch.zeros(self.d)
+        loc = loc.type(torch.float32).to(self.device)
         
-        cov = torch.eye(d) * (scale**2)
-        cov = cov.type(torch.float32)
-        cov = cov.to(device)
+        cov = torch.eye(self.d) * (self.scale**2)
+        cov = cov.type(torch.float32).to(self.device)
 
         self._dist = torch.distributions.MultivariateNormal(loc, cov)
+
+    def to(self, device):
+        self.device = device
+        self._initialize()
+        return self
 
     def log_prob(self, x):
         return self._dist.log_prob(x)
@@ -110,6 +119,10 @@ class UniformPrior:
         self.d = d
         self.volume = (100.0) ** self.d
         self.device = device
+
+    def to(self, device):
+        self.device = device
+        return self
 
     def log_prob(self, x):
         _log_prob = np.log(1.0 / self.volume)
@@ -562,5 +575,9 @@ class MENT:
             for i in range(len(self.measurements)):
                 for j in range(len(self.measurements[i])):
                     self.measurements[i][j] = self.measurements[i][j].to(device)
+        if self.sampler is not None:
+            self.sampler = self.sampler.to(device)
         self.device = device
+        if self.prior is not None:
+            self.prior = self.prior.to(device)
         return self
