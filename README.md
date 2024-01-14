@@ -16,20 +16,9 @@ pip install -e .
 ## Experiments
 
 Experiments use [hydra](https://hydra.cc). Config files can be found in `/experiments/config`. Parameters can be overridden with command line arguments. For example: 
-
 ```
 cd experiments/rec_2d/linear
 python train_flow.py device=mps
 ```
-
-To add a new parameter, such as specific flow parameters, add `+`:
-
-```
-python train_flow.py device=mps gen.name=nsf +gen.bins=8
-```
-
-Adding `++` overrides or adds.
-
-
 Results are stored in an `./outputs/{script_name}/{timestamp}/` directory created in the working directory, so it is best to `cd` to the script directoy before running. Runtime parameters and git info are stored in `./outputs/{script_name}/{timestamp}/.hydra/` for reproducibility.
 
