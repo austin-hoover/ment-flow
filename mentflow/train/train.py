@@ -26,6 +26,7 @@ class Trainer:
         eval=None,
         output_dir=None,
         notebook=False,
+        seed=None,
     ) -> None:
         
         self.model = model
@@ -36,6 +37,11 @@ class Trainer:
         self.eval = eval
         
         self.notebook = notebook
+        
+        self.seed = seed
+        if seed is not None:
+            np.random.seed(seed)
+            torch.manual_seed(seed)
 
         self.output_dir = output_dir
         if self.output_dir is not None:
@@ -131,7 +137,7 @@ class Trainer:
             Evaluation frequency.  Defaults to after each epoch.
         savefig_kws : dict
             Key word arguments for matplotlib.savefig. 
-        """
+        """        
         if not savefig_kws:
             savefig_kws = dict()
         savefig_kws.setdefault("dpi", 300)

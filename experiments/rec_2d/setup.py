@@ -26,6 +26,7 @@ def make_diagnostic(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
         noise_type=cfg.meas.noise_type,
         bandwidth=cfg.meas.bandwidth,
         device=cfg.device,
+        seed=cfg.seed,
     )
     diagnostic = diagnostic.to(device)
     return diagnostic

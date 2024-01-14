@@ -151,6 +151,19 @@ def generate_training_data(
         diagnostic.kde = True
         diagnostic.noise = False
 
+    # Renormalize measurements in case there was noise.
+    for i in range(len(measurements)):
+        for j in range(len(measurements[i])):
+            measurement = measurements[i][j]
+            diagnostic  = diagnostics[i][j]
+            bin_volume = 1.0
+            if measurement.ndim == 1:
+                bin_volume = diagnostic.bin_edges[1] - diagnostic.bin_edges[0]
+            else:
+                bin_volume = torch.prod([e[1] - e[0] for e in diagnostic.bin_edges])
+            measurement = measurement / measurement.sum() / bin_volume
+            measurements[i][j] = measurement
+
     return (transforms, diagnostics, measurements)
 
 

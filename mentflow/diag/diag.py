@@ -12,9 +12,10 @@ from mentflow.utils import unravel
 
 
 class Diagnostic(torch.nn.Module):
-    def __init__(self, device=None) -> None:
+    def __init__(self, device=None, seed=None) -> None:
         super().__init__()
         self.device = device
+        self.seed = seed
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
@@ -37,14 +38,18 @@ class Histogram(Diagnostic):
         hist = self._forward(x)
 
         if self.noise and self.noise_scale:
+            generator = torch.Generator(device=self.device)
+            if self.seed is not None:
+                generator.manual_seed(self.seed)
             if self.noise_type == "uniform":
-                frac_noise = self.noise_scale * torch.rand(hist.shape[0], device=self.device) * 2.0
+                frac_noise = torch.rand(hist.shape[0], generator=generator, device=self.device) * 2.0
+                frac_noise = self.noise_scale * frac_noise
             else:
-                frac_noise = self.noise_scale * torch.randn(hist.shape[0], device=self.device)
+                frac_noise = torch.randn(hist.shape[0], generator=generator, device=self.device)
+                frac_noise = self.noise_scale * frac_noise
             frac_noise = frac_noise.type(torch.float32)
             hist = hist * (1.0 + frac_noise)
             hist = torch.clamp(hist, 0.0, None)
-
         return hist
             
 
