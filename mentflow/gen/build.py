@@ -17,15 +17,14 @@ def build_flow(
     hidden_layers: int,
     hidden_units: int,
     transforms: int,
-    invert=True,
     device=None,
     **kws    
 ) -> WrappedZukoFlow:
     """Build normalizing flow (mentflow.gen.WrappedZukoFlow)."""
     constructors = {
+        "bpf": zuko.flows.BPF,
         "ffjord": zuko.flows.CNF,
         "gf": zuko.flows.GF,
-        "gmm": functools.partial(zuko.flows.GMM, components=16),
         "maf": zuko.flows.MAF,
         "nag": zuko.flows.NAF,
         "nsf": zuko.flows.NSF,
@@ -39,10 +38,11 @@ def build_flow(
     kws["transforms"] = transforms
 
     flow = constructor(**kws)
-    if invert:
+    
+    if name in ["maf", "nag", "nsf", "unaf"]:
         flow = zuko.flows.Flow(flow.transform.inv, flow.base)
-    if device is not None:
-        flow = flow.to(device)
+
+    flow = flow.to(device)
     return WrappedZukoFlow(flow)
 
 
