@@ -26,7 +26,6 @@ class Trainer:
         eval=None,
         output_dir=None,
         notebook=False,
-        seed=None,
     ) -> None:
         
         self.model = model
@@ -38,11 +37,6 @@ class Trainer:
         
         self.notebook = notebook
         
-        self.seed = seed
-        if seed is not None:
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-
         self.output_dir = output_dir
         if self.output_dir is not None:
             os.makedirs(self.output_dir, exist_ok=True)

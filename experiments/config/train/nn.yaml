@@ -12,5 +12,6 @@ lr_min: 0.001
 lr_drop: 0.1
 lr_patience: 400
 
+dmax: 0
 rtol: -1
 atol: -1

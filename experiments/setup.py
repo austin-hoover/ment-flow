@@ -126,6 +126,9 @@ def generate_training_data(
     """
     device = torch.device(cfg.device)
     send = lambda x: x.type(torch.float32).to(device)
+
+    if cfg.seed is not None:
+        torch.manual_seed(cfg.seed)
     
     # Define transforms.
     transforms = make_transforms(cfg)
