@@ -42,13 +42,15 @@ class Histogram(Diagnostic):
             if self.seed is not None:
                 generator.manual_seed(self.seed)
             if self.noise_type == "uniform":
-                frac_noise = torch.rand(hist.shape[0], generator=generator, device=self.device) * 2.0
-                frac_noise = self.noise_scale * frac_noise
+                noise = torch.rand(hist.shape[0], generator=generator, device=self.device) * 2.0
+                noise = noise * self.noise_scale
+            elif self.noise_type == "gaussian":
+                noise = torch.randn(hist.shape[0], generator=generator, device=self.device)
+                noise = noise * self.noise_scale
             else:
-                frac_noise = torch.randn(hist.shape[0], generator=generator, device=self.device)
-                frac_noise = self.noise_scale * frac_noise
-            frac_noise = frac_noise.type(torch.float32)
-            hist = hist * (1.0 + frac_noise)
+                noise = torch.zeros(hist.shape)
+                noise = noise.type(torch.float32).to(self.device)
+            hist = hist + noise
             hist = torch.clamp(hist, 0.0, None)
         return hist
             
