@@ -12,16 +12,17 @@ from mentflow.utils import unravel
 
 
 class Diagnostic(torch.nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, device=None) -> None:
         super().__init__()
+        self.device = device
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
 
 class Histogram(Diagnostic):
-    def __init__(self, noise_scale=0.0, noise_type="gaussian"):
-        super().__init__()
+    def __init__(self, noise_scale=0.0, noise_type="gaussian", **kws):
+        super().__init__(**kws)
         self.noise = True
         self.noise_scale = noise_scale
         self.noise_type = noise_type
@@ -37,9 +38,9 @@ class Histogram(Diagnostic):
 
         if self.noise and self.noise_scale:
             if self.noise_type == "uniform":
-                frac_noise = self.noise_scale * torch.rand(hist.shape[0]) * 2.0
+                frac_noise = self.noise_scale * torch.rand(hist.shape[0], device=self.device) * 2.0
             else:
-                frac_noise = self.noise_scale * torch.randn(hist.shape[0])
+                frac_noise = self.noise_scale * torch.randn(hist.shape[0], device=self.device)
             frac_noise = frac_noise.type(torch.float32)
             hist = hist * (1.0 + frac_noise)
             hist = torch.clamp(hist, 0.0, None)
@@ -177,6 +178,7 @@ class Histogram2D(Histogram):
         for i in range(self.d):
             self.bin_edges[i] = self.bin_edges[i].to(device)
             self.bin_coords[i] = self.bin_coords[i].to(device)
+        self.device = device
         return self
 
 

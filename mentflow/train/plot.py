@@ -159,7 +159,7 @@ class PlotModel:
         n_samples: int, 
         plot_proj: Callable,
         plot_dist: Callable, 
-        device: str = "cpu",
+        device=None,
     ):
         """Constructor.
 
@@ -182,14 +182,11 @@ class PlotModel:
         self.n_samples = n_samples
         self.plot_proj = plot_proj
         self.plot_dist = plot_dist
-        self.device = torch.device(device)
+        self.device = device
 
     def send(self, x):
         """Send x to device."""
-        x = x.type(torch.float32)
-        if self.device is not None:
-            x = x.to(self.device)
-        return x
+        return x.type(torch.float32).to(self.device)
 
     def __call__(self, model):
         """Return list of figures."""
