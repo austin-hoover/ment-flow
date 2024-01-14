@@ -432,7 +432,8 @@ class MENT:
                 else:
                     u[:, axis] = meas_point[k]
             # Compute the probability density at the integration points.
-            x, ladj = transform.inverse_and_ladj(u)
+            x = transform.inverse(u)
+            ladj = torch.zeros(x.shape[0])  # assume symplectic transform
             ladj = self.send(ladj)
             log_prob = self.log_prob(x) + ladj  # check sign
             prob = torch.exp(log_prob)

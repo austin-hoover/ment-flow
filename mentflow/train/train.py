@@ -89,8 +89,8 @@ class Trainer:
         epochs: int = 20,
         iterations: int = 1000,
         batch_size: int = 30000,
-        rtol: float = 0.05,
-        atol: float = 0.0,
+        rtol: float = -1.0,
+        atol: float = -1.0,
         dmax: float = 0.0,
         penalty_start: float = 0.0,
         penalty_step: float = 20.0,
@@ -279,7 +279,6 @@ class Trainer:
 
 
 
-
 class MENTTrainer(Trainer):
     """Trainer for MENT model."""
     def __init__(
@@ -319,7 +318,7 @@ class MENTTrainer(Trainer):
         iteration = 0
         start_time = time.time()
         
-        for epoch in range(epochs + 1):
+        for epoch in range(0, epochs + 1):
             print("epoch = {}".format(epoch))
 
             # Log info.
@@ -337,4 +336,3 @@ class MENTTrainer(Trainer):
             self.plot_model(epoch, iteration, **savefig_kws)        
             if epoch < epochs:
                 self.model.gauss_seidel_iterate(omega=omega)
-        

@@ -28,7 +28,7 @@ def forward(
     """
     predictions = []
     for index, transform in enumerate(transforms):
-        u = transform(x)
+        u = transform(x.clone())
         predictions.append([diagnostic(u) for diagnostic in diagnostics[index]])
     return predictions
 

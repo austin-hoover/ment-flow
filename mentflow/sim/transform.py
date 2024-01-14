@@ -1,7 +1,6 @@
 """Differentiable transformations.
 
-See the bmad-x repository for beam physics modeling capabilities.
-(https://github.com/bmad-sim/Bmad-X)
+See the bmad-x repository for particle accelerator modeling capabilities (https://github.com/bmad-sim/Bmad-X).
 """
 import math
 import typing
@@ -21,21 +20,8 @@ class Transform(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
-    def inverse(self, y: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
-
-    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
-
-    def forward_and_ladj(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        y = self.forward(x)
-        ladj = self.ladj(x, y)
-        return (y, ladj)
-
-    def inverse_and_ladj(self, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        x = self.inverse(y)
-        ladj = -self.ladj(y, x)
-        return (x, ladj)
+    def inverse(self, u: torch.Tensor) -> torch.Tensor:
+        return reverse_momentum(self.forward(reverse_momentum(u)))
 
 
 class CompositeTransform(nn.Module):
@@ -43,81 +29,28 @@ class CompositeTransform(nn.Module):
         super().__init__()
         self.transforms = nn.Sequential(*transforms)
 
-    def forward_and_ladj(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        ladj = 0.0
-        for transform in self.transforms:
-            x, _ladj = transform.forward_and_ladj(x)
-            ladj += _ladj
-        return (x, ladj)
-
-    def inverse_and_ladj(self, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        ladj = 0.0
-        for transform in self.transforms:
-            y, _ladj = transform.inverse_and_ladj(y)
-            ladj += _ladj
-        return (y, ladj)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for transform in self.transforms:
-            x = transform(x)
-        return x        
-
-    def inverse(self, y: torch.Tensor) -> torch.Tensor:
-        for transform in self.transforms:
-            y = transform.inverse(y)
-        return y
-
-    def reverse_transforms(self) -> None:
+    def reverse_order(self) -> None:
         self.transforms = nn.Sequential(*reversed([layer for layer in self.transforms]))
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        u = x
+        for transform in self.transforms:
+            u = transform(u)
+        return u
+
+    def inverse(self, u: torch.Tensor) -> torch.Tensor:
+        self.reverse_order()
+        x = reverse_momentum(self.forward(reverse_momentum(u)))
+        self.reverse_order()
+        return x
+    
     def to(self, device):
         for transform in self.transforms:
             transform.to(device)
         return self
-
-
-class SymplecticTransform(Transform):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def inverse(self, y: torch.Tensor) -> torch.Tensor:
-        x = y.clone()
-        x = reverse_momentum(x)
-        x = self.forward(x)
-        x = reverse_momentum(x)
-        return x        
-        
-    def ladj(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        return torch.zeros(x.shape[0])
         
 
-def CompositeSymplecticTransform(CompositeTransform):
-    def __init___(self, *transforms) -> None:
-        super().__init__(*transforms)
-
-    def inverse(self, y: torch.Tensor) -> torch.Tensor:
-        self.reverse_transforms()
-        x = y.clone()
-        x = reverse_momentum(x)
-        x = self.forward(x)
-        x = reverse_momentum(x)
-        self.reverse_transforms()
-        return x
-
-    def inverse_and_ladj(self, y: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.reverse_transforms()
-        y = x.clone()
-        y = reverse_momentum(y)
-        ladj = 0.0
-        for transform in self.transforms:
-            y, _ladj = transform.inverse_and_ladj(y)
-            ladj += _ladj
-        y = reverse_momentum(y)
-        self.reverse_transforms()
-        return (y, ladj)
-
-
-class LinearTransform(SymplecticTransform):
+class LinearTransform(Transform):
     def __init__(self, matrix: torch.Tensor) -> None:
         super().__init__()
         self.matrix = matrix
@@ -126,39 +59,90 @@ class LinearTransform(SymplecticTransform):
         self.matrix = matrix
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return nn.functional.linear(x, self.matrix)
+        return torch.matmul(x, self.matrix.T)
     
     def to(self, device):
         self.matrix = self.matrix.to(device)
         return self
 
 
-class QuadrupoleTransform(SymplecticTransform):
-    def __init__(self):
-        raise NotImplementedError
+class OffsetTransform(Transform):
+    def __init__(self, delta: float) -> None:
+        super().__init__()
+        self.delta = delta
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        u = x
+        for i in range(0, u.shape[1], 2):
+            u[:, i] = u[:, i] + self.delta
+        return u
+
+
+class MultipoleTransform(Transform):
+    """Apply multipole kick.
+    
+    https://github.com/PyORBIT-Collaboration/PyORBIT3/blob/main/src/teapot/teapotbase.cc    
+    
+    Parameters
+    ----------
+    order: int
+        The multipole number (0 for dipole, 1 for quad,, 2 for sextupole, etc.).
+    strength : float
+        Integrated kick strength [m^(-pole)].
+    skew : bool
+        If True, rotate the magnet 45 degrees.
+    """
+    def __init__(self, order: int, strength: float, skew: bool = False) -> None:
+        super().__init__()
+        self.order = order
+        self.strength = strength
+        self.skew = skew
+        
+    def forward(self, X):
+        k = self.strength / np.math.factorial(self.order - 1)
+        # U = X.clone()
+        U = X
+
+        x = U[:, 0]
+        if U.shape[1] > 2:
+            y = U[:, 2]
+        else:
+            y = 0.0 * U[:, 0]       
+        zn = (x + 1.0j * y) ** (self.order - 1)
+        
+        if self.skew:
+            U[:, 1] = U[:, 1] + k * zn.imag
+            if U.shape[1] > 2:
+                U[:, 3] = U[:, 3] + k * zn.real
+        else:
+            U[:, 1] = U[:, 1] - k * zn.real
+            if U.shape[1] > 2:
+                U[:, 3] = U[:, 1] + k * zn.imag
+        return U
         
 
-class MultipoleTransform(SymplecticTransform):
-    def __init__(self):
-        raise NotImplementedError
-
-
 class ProjectionTransform1D(Transform):
+    """Computes one-dimensional projection."""
     def __init__(self, vector: torch.Tensor):
         super().__init__()
         self.vector = vector / torch.norm(vector)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.sum(x * self.vector, dim=1)[:, None]
+
+    def inverse(self, u: torch.Tensor) -> torch.Tensor:
+        raise ValueError("ProjectionTransform1D is not invertible.")
         
 
 def rotation_matrix(angle):
+    """Return two-dimensional rotation matrix (angle in radians)."""
     _cos = np.cos(angle)
     _sin = np.sin(angle)
     return torch.tensor([[_cos, _sin], [-_sin, _cos]])
 
 
 def reverse_momentum(x):
+    """Reverse particle momenta. Assume order [x, px, y, py, ...]"""
     for i in range(0, x.shape[1], 2):
         x[:, i + 1] *= -1.0
     return x
