@@ -69,15 +69,17 @@ def plot_proj_1d(
         colors = ["black", "red"]
         
     ncols = min(len(y_meas), maxcols)
-    nrows = int(np.ceil(len(y_meas) / ncols))
+    nrows = int(np.ceil(len(y_meas) / ncols))    
     figheight = height * nrows
     figwidth = 1.75 * ncols
     fig, axs = pplt.subplots(ncols=ncols, nrows=nrows, figheight=figheight, figwidth=figwidth)
-    for j, ax in enumerate(axs):
-        scale = np.max(y_meas[j])
-        plot_profile(y_meas[j] / scale, edges[j], ax=ax, color=colors[0], **kws)
+
+    for index in range(len(y_meas)):
+        ax = axs[index]
+        scale = np.max(y_meas[index])
+        plot_profile(y_meas[index] / scale, edges[index], ax=ax, color=colors[0], **kws)
         if y_pred is not None:
-            plot_profile(y_pred[j] / scale, edges[j], ax=ax, color=colors[1], **kws)
+            plot_profile(y_pred[index] / scale, edges[index], ax=ax, color=colors[1], **kws)
     axs.format(ymax=ymax)
     return fig, axs
 
