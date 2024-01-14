@@ -31,8 +31,6 @@ def setup_mentflow_model(
     # Set default arguments for specific flows.
     if kws["name"] == "nsf":
         kws.setdefault("bins", 20)
-    if kws["name"] == "bpf":
-        kws.setdefault("degree", 16)
     
     gen = mf.gen.build_gen(device=cfg.device, **kws)
     gen = gen.to(cfg.device)
@@ -145,11 +143,13 @@ def generate_training_data(
     # Simulate measurements.
     for diagnostic in unravel(diagnostics):
         diagnostic.kde = False        
+        diagnostic.noise = True
         
     measurements = mf.sim.forward(x, transforms, diagnostics)
     
     for diagnostic in unravel(diagnostics):
         diagnostic.kde = True
+        diagnostic.noise = False
 
     return (transforms, diagnostics, measurements)
 
