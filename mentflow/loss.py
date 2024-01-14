@@ -35,8 +35,6 @@ class SlicedWassersteindDistance:
         self.n_projections = n_projections
         self.p = p
         self.device = device
-        if self.device is None:
-            self.device = torch.device("cpu")
     
     def __call__(self, x1, x2): 
         if x1.shape[1] != x2.shape[1]:

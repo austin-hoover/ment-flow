@@ -53,16 +53,14 @@ def sample_hist_torch(hist, bin_edges=None, n=1):
 
 
 class GridSampler:
-    def __init__(self, limits: Tuple[Tuple[float], Tuple[float]] = None, res: int = 50, device=None) -> None:
+    def __init__(self, limits=None, res=50, device=None):
+        self.device = device
         self.res = res
         self.limits = limits
         self.d = len(limits)
         self.initialize(limits=limits, res=res)
-        self.device = device
-        if self.device is None:
-            self.device = torch.device("cpu")
 
-    def _send(self, x):
+    def send(self, x):
         return x.type(torch.float32).to(self.device)
 
     def initialize(self, limits=None, res=None):
@@ -75,6 +73,7 @@ class GridSampler:
             torch.linspace(self.limits[i][0], self.limits[i][1], self.res + 1) 
             for i in range(self.d)
         ]
+        self.grid_edges = [self.send(e) for e in self.grid_edges]
         self.grid_coords = [0.5 * (e[:-1] + e[1:]) for e in self.grid_edges]
         self.shape = self.d * [self.res]
 
@@ -86,10 +85,10 @@ class GridSampler:
         
     def __call__(self, log_prob_func: Callable, n: int) -> torch.Tensor:
         grid_points = self.get_grid_points()
-        grid_points = self._send(grid_points)
+        grid_points = self.send(grid_points)
         log_values = log_prob_func(grid_points)
         values = torch.exp(log_values)
         values = values.reshape(self.shape)
         x = sample_hist_torch(values, bin_edges=self.grid_edges, n=n)
-        x = self._send(x)
+        x = self.send(x)
         return x

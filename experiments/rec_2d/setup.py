@@ -68,7 +68,7 @@ def setup_eval(cfg: DictConfig) -> Callable:
     """Set up eval function from config."""
     
     def eval(model): 
-        device = torch.device(cfg.device)
+        device = cfg.device
         
         # Compute distance between measured/simulated projections.
         x_pred = model.sample(cfg.eval.size)

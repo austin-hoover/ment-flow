@@ -89,17 +89,15 @@ def interpolate_dd(
 class GaussianPrior:
     """Gaussian prior distribution."""
     def __init__(self, d=2, scale=1.0, device=None):
-        mean = torch.zeros(d)
-        mean = mean.type(torch.float32)
-        if device is not None:
-            mean = mean.to(device)
-
+        loc = torch.zeros(d)
+        loc = loc.type(torch.float32)
+        loc = loc.to(device)
+        
         cov = torch.eye(d) * (scale**2)
         cov = cov.type(torch.float32)
-        if device is not None:
-            cov = cov.to(device)
+        cov = cov.to(device)
 
-        self._dist = torch.distributions.MultivariateNormal(mean, cov)
+        self._dist = torch.distributions.MultivariateNormal(loc, cov)
 
     def log_prob(self, x):
         return self._dist.log_prob(x)
@@ -117,8 +115,7 @@ class UniformPrior:
         _log_prob = np.log(1.0 / self.volume)
         _log_prob = torch.ones(x.shape[0]) * _log_prob
         _log_prob = _log_prob.type(torch.float32)
-        if self.device is not None:
-            _log_prob = _log_prob.to(self.device)
+        _log_prob = _log_prob.to(self.device)
         return _log_prob
 
 
@@ -199,8 +196,6 @@ class MENT:
     ) -> None:
         """Constructor."""
         self.device = device
-        if self.device is None:
-            self.device = torch.device("cpu")
 
         self.d = d
         self.epoch = 0
@@ -266,7 +261,7 @@ class MENT:
         if self.d_meas == 1:
             bin_volume = diagnostic.bin_edges[1] - diagnostic.bin_edges[0]
         else:
-            bin_volume = math.prod((e[1] - e[0]) for e in diagnostic.bin_edges)
+            bin_volume = torch.prod((e[1] - e[0]) for e in diagnostic.bin_edges)
         return projection / projection.sum() / bin_volume
 
     def initialize_lagrange_functions(self) -> None:
@@ -401,10 +396,13 @@ class MENT:
 
         # Get measurement and integration points.
         meas_points = self.get_meas_points(index)
+        meas_points = self.send(meas_points)
         int_points = self.get_integration_points(index=index)
+        int_points = self.send(int_points)
 
         # Initialize transformed coordinates u.
         u = torch.zeros((int_points.shape[0], self.d))
+        u = self.send(u)
         for k, axis in enumerate(int_axis):
             if len(int_axis) == 1:
                 u[:, axis] = int_points
@@ -422,9 +420,10 @@ class MENT:
                     u[:, axis] = meas_point[k]
             # Compute the probability density at the integration points.
             x, ladj = transform.inverse_and_ladj(u)
+            ladj = self.send(ladj)
             log_prob = self.log_prob(x) + ladj  # check sign
             prob = torch.exp(log_prob)
-            # Add 'em up.
+            # Integrate.
             prediction[i] = torch.sum(prob)
 
         # Reshape the flattened projection.
@@ -432,6 +431,7 @@ class MENT:
             prediction = prediction.reshape(diagnostic.shape)
 
         # Normalize the projection.
+        prediction = self.send(prediction)
         prediction = self._normalize_projection(prediction, index)
         return prediction
 
@@ -562,4 +562,5 @@ class MENT:
             for i in range(len(self.measurements)):
                 for j in range(len(self.measurements[i])):
                     self.measurements[i][j] = self.measurements[i][j].to(device)
+        self.device = device
         return self

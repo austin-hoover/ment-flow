@@ -181,9 +181,9 @@ def setup_ment_model(
     
     prior = None
     if cfg.model.prior == "gaussian":
-        prior = mf.alg.ment.GaussianPrior(d=d, scale=cfg.model.prior_scale)
+        prior = mf.alg.ment.GaussianPrior(d=d, scale=cfg.model.prior_scale, device=cfg.device)
     if cfg.model.prior == "uniform":
-        prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale))
+        prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale), device=cfg.device)
 
     sampler = None
     if cfg.model.sampler == "grid":
@@ -192,7 +192,7 @@ def setup_ment_model(
             grid_xmax = cfg.eval.xmax
         grid_limits = d * [(-grid_xmax, grid_xmax)]
         grid_res = cfg.model.sampler_res
-        sampler = mf.sample.GridSampler(limits=grid_limits, res=grid_res)
+        sampler = mf.sample.GridSampler(limits=grid_limits, res=grid_res, device=cfg.device)
 
     integration_grid_limits = [(-cfg.model.integration_xmax, +cfg.model.integration_xmax)]
     integration_grid_shape = (cfg.model.integration_res,)
@@ -210,7 +210,9 @@ def setup_ment_model(
         integration_grid_limits=integration_grid_limits,
         integration_grid_shape=integration_grid_shape,
         n_samples=cfg.train.batch_size,
+        device=cfg.device,
     )
+    model.to(cfg.device)
     return model
 
 
