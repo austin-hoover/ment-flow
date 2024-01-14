@@ -14,4 +14,4 @@ lr_patience: 400
 
 rtol: -1
 atol: -1
-dmax: 7.50e-04
+dmax: 0.50e-04

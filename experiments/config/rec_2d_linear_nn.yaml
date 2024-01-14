@@ -3,8 +3,8 @@ defaults:
     - dist: synth_2d
     - meas: default
     - gen: nn
-    - model: ${gen}
-    - train: ${gen}
+    - model: nn
+    - train: nn
     - _self_
 
 meas:

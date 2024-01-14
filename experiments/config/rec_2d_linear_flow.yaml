@@ -2,9 +2,9 @@ defaults:
     - base
     - dist: synth_2d
     - meas: default
-    - gen: nsf
-    - model: ${gen}
-    - train: ${gen}
+    - gen: flow
+    - model: flow
+    - train: flow
     - _self_
 
 meas:
