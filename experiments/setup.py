@@ -24,14 +24,21 @@ def setup_mentflow_model(
     send = lambda x: x.type(torch.float32).to(cfg.device)
 
     # Build generative model.
-    build_gen_kws = OmegaConf.to_container(cfg.gen)
-    build_gen_kws["input_features"]  = cfg.d
-    build_gen_kws["output_features"] = cfg.d
-    gen = mf.gen.build_gen(device=cfg.device, **build_gen_kws)
+    kws = OmegaConf.to_container(cfg.gen)
+    kws["input_features"]  = cfg.d
+    kws["output_features"] = cfg.d
+
+    # Set default arguments for specific flows.
+    if kws["name"] == "nsf":
+        kws.setdefault("bins", 20)
+    if kws["name"] == "bpf":
+        kws.setdefault("degree", 16)
+    
+    gen = mf.gen.build_gen(device=cfg.device, **kws)
     gen = gen.to(cfg.device)
 
     # Set Gaussian prior width.
-    d = build_gen_kws["output_features"]
+    d = cfg.d
     prior = zuko.distributions.DiagNormal(
         send(torch.zeros(d)),
         send(cfg.model.prior_scale * torch.ones(d)),
