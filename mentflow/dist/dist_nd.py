@@ -1,12 +1,10 @@
-"""Radial (spherically symmetric) distributions."""
 import numpy as np
 
-from mentflow.dist import Distribution
-from mentflow.dist import decorrelate
+from .dist import Distribution
+from .dist import decorrelate
 
 
 class Gaussian(Distribution):
-    """Spherical Gaussian distribution."""
     def __init__(self, **kws):
         super().__init__(**kws)
 
@@ -15,7 +13,6 @@ class Gaussian(Distribution):
         
 
 class KV(Distribution):
-    """Kapchinskij-Vladimirskij distribution (uniformly populated sphere)."""
     def __init__(self, **kws):
         super().__init__(**kws)
         if self.noise is None:
@@ -29,7 +26,6 @@ class KV(Distribution):
         
 
 class WaterBag(Distribution):
-    """Waterbag distribution (uniformly populated ball)."""
     def __init__(self, **kws):
         super().__init__(**kws)
         if self.noise is None:

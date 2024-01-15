@@ -6,6 +6,7 @@ import numpy as np
 import ot
 import torch
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import mentflow as mf
 from mentflow.utils import unravel
@@ -34,12 +35,10 @@ def make_diagnostic(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
 
 def make_dist(cfg: DictConfig) -> mf.dist.Distribution:
     """Make two-dimensional synthetic distribution from config."""
-    dist = mf.dist.toy.gen_dist(
-        name=cfg.dist.name,
-        noise=cfg.dist.noise,
-        decorr=cfg.dist.decorr,
-        rng=np.random.default_rng(seed=cfg.seed),
-    )
+    kws = OmegaConf.to_container(cfg.dist)
+    kws["seed"] = cfg.seed
+    kws.pop("size", None)
+    dist = mf.dist.dist_2d.gen_dist(**kws)
     return dist
     
 

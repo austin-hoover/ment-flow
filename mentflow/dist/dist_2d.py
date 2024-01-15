@@ -6,19 +6,28 @@ import numpy as np
 import scipy.stats
 import skimage as ski
 
-from mentflow.dist import radial
-from mentflow.dist.dist import Distribution
-from mentflow.dist.dist import normalize
-from mentflow.dist.radial import Gaussian
-from mentflow.dist.radial import Hollow
-from mentflow.dist.radial import Rings
-from mentflow.sample import sample_hist
+from . import dist_nd
+from .dist import Distribution
+from .dist import normalize
+from ..sample import sample_hist
 
 
-
-class EightGaussians(Distribution):
-    def __init__(self, **kws):
+class Dist2D(Distribution):
+    def __init__(self, shear=0.0, **kws):
         super().__init__(d=2, **kws)
+        self.shear = shear
+    
+    def _process(self, X):
+        sigma_old = np.std(X[:, 0])
+        X[:, 0] = X[:, 0] + self.shear * X[:, 1]
+        sigma_new = np.std(X[:, 0])
+        X[:, 0] = X[:, 0] * (sigma_old / sigma_new)
+        return X
+    
+
+class EightGaussians(Dist2D):
+    def __init__(self, **kws):
+        super().__init__(**kws)
         if self.noise is None:
             self.noise = 0.20
 
@@ -28,12 +37,13 @@ class EightGaussians(Distribution):
         y = np.sin(theta)
         X = np.stack([x, y], axis=-1)
         X *= 1.5
+        X = self._process(X) 
         return X
 
 
-class Galaxy(Distribution):
+class Galaxy(Dist2D):
     def __init__(self, turns=5, truncate=3.0, **kws):
-        super().__init__(d=2, **kws)
+        super().__init__(**kws)
         self.turns = turns
         self.truncate = truncate
         if self.noise is None:
@@ -63,24 +73,51 @@ class Galaxy(Distribution):
         # Standardize the data set.
         X = X / np.std(X, axis=0)
         X = X * 0.85
+        X = self._process(X)
         return X
 
 
-class KV(Distribution):
-    """Projection of 4D Kapchinskij-Vladimirskij (microcanonical) distribution."""
+class Gaussian(Dist2D):
+    def __init__(self, **kws):
+        super().__init__(**kws)
+
+    def _sample(self, n):
+        X = self.rng.normal(size=(n, 2))
+        X = self._process(X)
+        return X
+    
+
+class Hollow(Dist2D):
+    def __init__(self, exp=0.25, **kws):
+        super().__init__(**kws)
+        self.exp = exp
+        if self.noise is None:
+            self.noise = 0.05
+
+    def _sample(self, n):
+        X = dist_nd.KV(d=self.d, rng=self.rng).sample_numpy(n)
+        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** self.exp
+        X = X * r[:, None]
+        X = X / np.std(X, axis=0)
+        X = self._process(X)
+        return X
+
+
+class KV(Dist2D):
     def __init__(self, **kws):
         super().__init__(**kws)
         if self.noise is None:
             self.noise = 0.05
 
     def _sample(self, n):
-        X = radial.KV(d=4, rng=self.rng).sample_numpy(n)
+        X = dist_nd.KV(d=4, rng=self.rng).sample_numpy(n)
         X = X[:, :2]
         X = X / np.std(X, axis=0)
+        X = self._process(X)
         return X
 
 
-class Leaf(Distribution):
+class Leaf(Dist2D):
     def __init__(self, xmax=2.5, **kws):
         super().__init__(**kws)
         if self.noise is None:
@@ -95,13 +132,14 @@ class Leaf(Distribution):
         self.edges = [np.linspace(-self.xmax, +self.xmax, s + 1) for s in self.hist.shape]
 
     def _sample(self, n):
-        x = sample_hist(self.hist, self.edges, n=n)
-        return x
+        X = sample_hist(self.hist, self.edges, n=n)
+        X = self._process(X)
+        return X
 
 
-class Pinwheel(Distribution):
+class Pinwheel(Dist2D):
     def __init__(self, **kws):
-        super().__init__(d=2, **kws)
+        super().__init__(**kws)
         if self.noise is None:
             self.noise = 0.10
 
@@ -114,12 +152,34 @@ class Pinwheel(Distribution):
         y = a * np.sin(theta) + b * np.cos(theta)
         X = np.stack([x, y], axis=-1)
         X = X / np.std(X, axis=0)
+        X = self._process(X)
         return X
 
 
-class SwissRoll(Distribution):
+class Rings(Dist2D):
+    def __init__(self, n_rings=2, **kws):
+        super().__init__(**kws)
+        self.n_rings = n_rings
+        if self.noise is None:
+            self.noise = 0.15
+
+    def _sample(self, n):
+        n_outer = n // self.n_rings
+        sizes = [n - (self.n_rings - 1) * n_outer] + (self.n_rings - 1) * [n_outer]
+        radii = np.linspace(0.0, 1.0, self.n_rings + 1)[1:]
+        X = []
+        dist = dist_nd.KV(d=self.d, rng=self.rng)
+        for size, radius in zip(sizes, radii):
+            X.append(radius * dist.sample(size))
+        X = np.vstack(X)
+        X = X / np.std(X, axis=0)
+        X = self._process(X)
+        return X
+        
+
+class SwissRoll(Dist2D):
     def __init__(self, **kws):
-        super().__init__(d=2, **kws)
+        super().__init__(**kws)
         if self.noise is None:
             self.noise = 0.15
 
@@ -127,12 +187,13 @@ class SwissRoll(Distribution):
         t = 1.5 * np.pi * (1.0 + 2.0 * self.rng.uniform(0.0, 1.0, size=n))
         X = np.stack([t * np.cos(t), t * np.sin(t)], axis=-1)
         X = X / np.std(X, axis=0)
+        X = self._process(X)
         return X
 
 
-class TwoSpirals(Distribution):
+class TwoSpirals(Dist2D):
     def __init__(self, exp=0.65, **kws):
-        super().__init__(d=2, **kws)
+        super().__init__(**kws)
         self.exp = exp
         if self.noise is None:
             self.noise = 0.070
@@ -144,19 +205,20 @@ class TwoSpirals(Distribution):
         t = t + self.rng.normal(size=n, scale=np.linspace(0.0, 1.0, n))
         X = np.stack([-r * np.cos(t), r * np.sin(t)], axis=-1)
         X = X / np.std(X, axis=0)
+        X = self._process(X)
         return X
 
 
-class WaterBag(Distribution):
+class WaterBag(Dist2D):
     def __init__(self, **kws):
         super().__init__(**kws)
 
     def _sample(self, n):
-        X = radial.WaterBag(d=4, rng=self.rng).sample_numpy(n)
+        X = dist_nd.WaterBag(d=4, rng=self.rng).sample_numpy(n)
         X = X[:, :2]
         X = X / np.std(X, axis=0)
+        X = self._process(X)
         return X
-
 
 
 DISTRIBUTIONS = {

@@ -5,11 +5,11 @@ import mentflow.types_
 
 
 class Distribution:
-    def __init__(self, d=2, rng=None, normalize=False, shuffle=True, noise=None, decorr=False, x=None):
+    def __init__(self, d=2, seed=None, rng=None, normalize=False, shuffle=True, noise=None, decorr=False, x=None):
         self.d = d
         self.rng = rng
         if self.rng is None:
-            self.rng = np.random.default_rng()
+            self.rng = np.random.default_rng(seed)
         self.normalize = normalize
         self.noise = noise
         self.shuffle = shuffle
