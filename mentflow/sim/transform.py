@@ -100,24 +100,27 @@ class MultipoleTransform(Transform):
         
     def forward(self, X):
         k = self.strength / np.math.factorial(self.order - 1)
-        # U = X.clone()
-        U = X
 
-        x = U[:, 0]
-        if U.shape[1] > 2:
-            y = U[:, 2]
+        U = X.clone()
+        
+        x = X[:, 0]        
+        if X.shape[1] > 2:
+            y = X[:, 2]
         else:
-            y = 0.0 * U[:, 0]       
-        zn = (x + 1.0j * y) ** (self.order - 1)
+            y = 0.0 * X[:, 0]
+
+        z = torch.complex(x, y)
+        zn = torch.pow(z, float(self.order - 1))
+        zn = z ** (self.order - 1)
         
         if self.skew:
-            U[:, 1] = U[:, 1] + k * zn.imag
-            if U.shape[1] > 2:
-                U[:, 3] = U[:, 3] + k * zn.real
+            U[:, 1] = X[:, 1] + k * zn.imag
+            if X.shape[1] > 2:
+                U[:, 3] = X[:, 3] + k * zn.real
         else:
-            U[:, 1] = U[:, 1] - k * zn.real
-            if U.shape[1] > 2:
-                U[:, 3] = U[:, 1] + k * zn.imag
+            U[:, 1] = X[:, 1] - k * zn.real
+            if X.shape[1] > 2:
+                U[:, 3] = X[:, 1] + k * zn.imag
         return U
         
 
