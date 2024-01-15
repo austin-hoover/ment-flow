@@ -1,6 +1,6 @@
 epochs: 20
 iters: 300
-batch_size: 30000
+batch_size: 10000
 
 penalty: 0.0
 penalty_step: 20.0
