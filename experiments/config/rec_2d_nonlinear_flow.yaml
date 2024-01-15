@@ -1,0 +1,10 @@
+defaults:
+    - base
+    - dist: synth_2d
+    - meas: default
+    - gen: flow
+    - model: flow
+    - train: flow
+    - _self_
+
+d: 2

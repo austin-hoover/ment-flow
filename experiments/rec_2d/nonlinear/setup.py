@@ -19,4 +19,22 @@ mf.train.plot.set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig):
-    raise NotImplementedError
+    transforms = []
+
+    ## Constant linear focusing, varying multipole.
+    strength_max = +0.5
+    strength_min = -strength_max
+    order = 3
+    strengths = np.linspace(strength_min, strength_max, cfg.meas.num)
+    for strength in strengths:
+        multipole = mf.sim.MultipoleTransform(order=order, strength=strength)
+    
+        angle = np.radians(45.0)
+        matrix = mf.sim.rotation_matrix(angle)
+        matrix = matrix.type(torch.float32)
+        rotation = mf.sim.LinearTransform(matrix)
+        
+        transform = mf.sim.CompositeTransform(multipole, rotation)
+        transforms.append(transform)
+
+    return transforms
