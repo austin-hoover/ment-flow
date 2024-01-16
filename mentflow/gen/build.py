@@ -22,7 +22,7 @@ def build_flow(
 ) -> WrappedZukoFlow:
     """Build normalizing flow (mentflow.gen.WrappedZukoFlow)."""
     constructors = {
-        "bpf": zuko.flows.BPF,
+        # "bpf": zuko.flows.BPF,
         "ffjord": zuko.flows.CNF,
         "gf": zuko.flows.GF,
         "maf": zuko.flows.MAF,

@@ -50,7 +50,6 @@ class NNGen(GenModel):
         super().__init__()
         self.network = network
         self.base = base
-        self.has_prob = False
 
     def sample(self, n: int) -> torch.Tensor:
         x = self.base.rsample((n,))
@@ -75,8 +74,8 @@ class NNGen(GenModel):
         return self.base.rsample((n,))
 
     def to(self, device):
-        self.base.loc
         self.network = self.network.to(device)
+        # Need to send base to device... 
         return self
 
         
