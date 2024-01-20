@@ -1,4 +1,6 @@
 from typing import Callable
+from typing import List
+
 import numpy as np
 import proplot as pplt
 import torch
@@ -99,6 +101,36 @@ def plot_dist_2d(x1, x2, fig_kws=None, **kws):
     return fig, axs
 
 
+def plot_dist_radial(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=1.25, **kws):
+    if colors is None:
+        colors = ["black", "red"]
+
+    if fig_kws is None:
+        fig_kws = dict()
+    fig_kws.setdefault("figwidth", 3.0)
+    fig_kws.setdefault("figheight", 2.0)
+
+    bin_edges = np.linspace(0.0, rmax, bins + 1)
+
+    r1 = np.linalg.norm(x1, axis=1)
+    r2 = np.linalg.norm(x2, axis=1)
+    hist_r1, _ = np.histogram(r1, bins=bin_edges)
+    hist_r2, _ = np.histogram(r2, bins=bin_edges)
+
+    for i in range(len(bin_edges) - 1):
+        rmin = bin_edges[i]
+        rmax = bin_edges[i + 1]
+        hist_r1[i] = hist_r1[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x1.shape[1])
+        hist_r2[i] = hist_r2[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x2.shape[1])
+    
+    fig, ax = pplt.subplots(**fig_kws)
+    scale = hist_r1.max()
+    plot_profile(hist_r1 / scale, bin_edges, ax=ax, color=colors[0], **kws)
+    plot_profile(hist_r2 / scale, bin_edges, ax=ax, color=colors[1], **kws)
+    ax.format(ymax=ymax)
+    return fig, ax
+    
+
 class PlotProj1D:
     def __init__(
         self,
@@ -148,6 +180,19 @@ class PlotDist2D:
         return fig, axs
 
 
+class PlotDistRadial:
+    def __init__(self, rmax=5.0, bins=75, fig_kws=None, **kws):
+        self.kws = kws
+        self.kws["rmax"] = rmax
+        self.kws["bins"] = bins
+        self.kws["fig_kws"] = fig_kws
+
+    def __call__(self, x1, x2):
+        fig, ax = plot_dist_radial(x1, x2, **self.kws)
+        ax.format(xlabel="Radius", ylabel="Normalized density")
+        return fig, ax
+
+
 class PlotModel:
     """Visualize predicted distribution and projections.
 
@@ -157,8 +202,8 @@ class PlotModel:
         self, 
         dist: Callable,
         n_samples: int, 
-        plot_proj: Callable,
-        plot_dist: Callable, 
+        plot_proj: List[Callable],
+        plot_dist: List[Callable], 
         device=None,
     ):
         """Constructor.
@@ -169,10 +214,10 @@ class PlotModel:
             Implements `dist.sample(n)` to draw samples from the true distribution.
         n_samples : int
             Number of samples to plot.
-        plot_dist: callable
+        plot_dist: list[callable]
             Plots samples from true and predicted distributions.
             Signature: `plot_dist(x_true, x_pred)`.
-        plot_proj: callable
+        plot_proj: list[callable]
             Plots simulated vs. actual measurements.
             Signature: `plot_proj(y_meas, y_pred, edges)`.
         device : str
@@ -183,6 +228,13 @@ class PlotModel:
         self.plot_proj = plot_proj
         self.plot_dist = plot_dist
         self.device = device
+
+        if self.plot_proj is not None:
+            if type(self.plot_proj) not in [list, tuple]:
+                self.plot_proj = [self.plot_proj,]
+        if self.plot_dist is not None:
+            if type(self.plot_dist) not in [list, tuple]:
+                self.plot_dist = [self.plot_dist,]
 
     def send(self, x):
         """Send x to device."""
@@ -202,9 +254,11 @@ class PlotModel:
         figs = []
         
         ## Plot model vs. true samples.
-        fig, axs = self.plot_dist(grab(x_true), grab(x_pred))
-        figs.append(fig)
-    
+        if self.plot_dist is not None:
+            for function in self.plot_dist:
+                fig, axs = function(grab(x_true), grab(x_pred))
+                figs.append(fig)
+        
         ## Plot measured vs. simulated projections.
         y_meas = [grab(measurement) for measurement in unravel(model.measurements)]
         y_pred = [grab(prediction) for prediction in unravel(predictions)]
@@ -212,9 +266,10 @@ class PlotModel:
         for index, transform in enumerate(model.transforms):
             for diagnostic in model.diagnostics[index]:
                 edges.append(grab(diagnostic.bin_edges))
-                
-        fig, axs = self.plot_proj(y_meas, y_pred, edges)
-        figs.append(fig)
+
+        if self.plot_proj is not None:
+            for function in self.plot_proj:
+                fig, axs = function(y_meas, y_pred, edges)
+                figs.append(fig)
         
         return figs
-
