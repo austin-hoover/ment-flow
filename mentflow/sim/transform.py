@@ -66,18 +66,6 @@ class LinearTransform(Transform):
         return self
 
 
-class OffsetTransform(Transform):
-    def __init__(self, delta: float) -> None:
-        super().__init__()
-        self.delta = delta
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        u = x
-        for i in range(0, u.shape[1], 2):
-            u[:, i] = u[:, i] + self.delta
-        return u
-
-
 class MultipoleTransform(Transform):
     """Apply multipole kick.
     
@@ -134,7 +122,6 @@ class MultipoleTransform(Transform):
         else:
             raise ValueError("MPS-compatible MultipoleTransform requires order <= 5.")
 
-        
         k = self.strength / np.math.factorial(self.order - 1)
         if self.skew:
             U[:, 1] = X[:, 1] + k * zn_imag
@@ -145,16 +132,16 @@ class MultipoleTransform(Transform):
             if X.shape[1] > 2:
                 U[:, 3] = X[:, 1] + k * zn_imag
         return U
-        
+
 
 class ProjectionTransform1D(Transform):
     """Computes one-dimensional projection."""
-    def __init__(self, vector: torch.Tensor):
+    def __init__(self, direction: torch.Tensor):
         super().__init__()
-        self.vector = vector / torch.norm(vector)
+        self.direction = direction / torch.norm(direction)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.sum(x * self.vector, dim=1)[:, None]
+        return torch.sum(x * self.direction, dim=1)[:, None]
 
     def inverse(self, u: torch.Tensor) -> torch.Tensor:
         raise ValueError("ProjectionTransform1D is not invertible.")
