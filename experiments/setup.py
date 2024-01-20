@@ -117,12 +117,12 @@ def train_mentflow_model(
 def generate_training_data(
     cfg: DictConfig, 
     make_dist: Callable,
-    make_diagnostic: Callable,
+    make_diagnostics: Callable,
     make_transforms: Callable, 
 ):
     """Generate training data (tranforms, diagnostics, measurements) from config.
 
-    This function creates the same diagnostic for each transform.
+    This function creates the same set of diagnostic for each transform.
     """
     device = torch.device(cfg.device)
     send = lambda x: x.type(torch.float32).to(device)
@@ -135,8 +135,8 @@ def generate_training_data(
     transforms = [transform.to(device) for transform in transforms]
     
     # Create histogram diagnostic.
-    diagnostic = make_diagnostic(cfg)
-    diagnostics = [[diagnostic,] for transform in transforms]
+    diagnostics = make_diagnostics(cfg)
+    diagnostics = [diagnostics for transform in transforms]
 
     # Generate samples from input distribution.
     dist = make_dist(cfg)

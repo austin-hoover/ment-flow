@@ -1,18 +1,14 @@
-import os
-import pathlib
-
 import hydra
 import numpy as np
 import torch
 from omegaconf import DictConfig
-from omegaconf import OmegaConf
 
 import mentflow as mf
 
 import setup
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_linear_flow.yaml")
+@hydra.main(version_base=None, config_path="../config", config_name="rec_nd_1d_linear_flow.yaml")
 def main(cfg: DictConfig):
     print(cfg)
 

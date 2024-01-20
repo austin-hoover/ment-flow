@@ -22,19 +22,22 @@ def make_transforms(cfg: DictConfig):
     transforms = []
 
     ## Constant linear focusing, varying multipole.
-    strength_max = +0.5
+    order = 4
+    strength_max = +1.0
     strength_min = -strength_max
-    order = 3
     strengths = np.linspace(strength_min, strength_max, cfg.meas.num)
-    for strength in strengths:
+
+    angles = np.radians(np.linspace(0.0, 180.0, cfg.meas.num, endpoint=False))
+    
+    for strength, angle in zip(strengths, angles):
         multipole = mf.sim.MultipoleTransform(order=order, strength=strength)
     
-        angle = np.radians(45.0)
         matrix = mf.sim.rotation_matrix(angle)
         matrix = matrix.type(torch.float32)
-        rotation = mf.sim.LinearTransform(matrix)
+        transform = mf.sim.LinearTransform(matrix)
         
-        transform = mf.sim.CompositeTransform(multipole, rotation)
+        transform = mf.sim.CompositeTransform(multipole, transform)
+        
         transforms.append(transform)
 
     return transforms

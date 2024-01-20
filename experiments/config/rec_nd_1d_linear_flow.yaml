@@ -1,0 +1,13 @@
+defaults:
+    - base
+    - dist: synth_nd
+    - meas: default
+    - gen: flow
+    - model: flow
+    - train: flow
+    - _self_
+
+meas:
+    num: 10
+
+d: 4

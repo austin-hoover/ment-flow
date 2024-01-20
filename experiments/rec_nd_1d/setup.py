@@ -1,15 +1,39 @@
-"""Setup for 2:1 reconstructions."""
+"""Setup for n:1 reconstructions."""
 from typing import Callable
 from typing import List
 
 import numpy as np
-import ot
 import torch
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 import mentflow as mf
 from mentflow.utils import unravel
+
+from experiments.setup import generate_training_data
+from experiments.setup import setup_mentflow_model
+from experiments.setup import train_mentflow_model
+
+
+mf.train.plot.set_proplot_rc()
+
+
+def make_transforms(cfg: DictConfig):
+    """Generate rotation matrix transforms for uniformly spaced angles."""
+    device = torch.device(cfg.device)
+    
+    generator = torch.Generator(device=device)
+    if cfg.seed is not None:
+        generator.manual_seed(cfg.seed)
+
+    directions = torch.randn((cfg.meas.num, cfg.d), generator=generator, device=device)
+    directions = directions / torch.norm(directions, dim=1)[:, None]
+    
+    transforms = []
+    for direction in directions:
+        transform = mf.sim.ProjectionTransform1D(direction)
+        transforms.append(transform)
+    return transforms
 
 
 def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
@@ -19,9 +43,9 @@ def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
     bin_edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
     bin_edges = bin_edges.type(torch.float32)
     bin_edges = bin_edges.to(device)
-    
+
     diagnostic = mf.diag.Histogram1D(
-        axis=0, 
+        axis=0,
         bin_edges=bin_edges, 
         noise_scale=cfg.meas.noise_scale, 
         noise_type=cfg.meas.noise_type,
@@ -35,25 +59,30 @@ def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
 
 
 def make_dist(cfg: DictConfig) -> mf.dist.Distribution:
-    """Make two-dimensional synthetic distribution from config."""
+    """Make n-dimensional distribution from config."""
     kws = OmegaConf.to_container(cfg.dist)
+    kws["d"] = cfg.d
     kws["seed"] = cfg.seed
     kws.pop("size", None)
-    dist = mf.dist.dist_2d.gen_dist(**kws)
+    dist = mf.dist.dist_nd.gen_dist(**kws)
     return dist
     
 
 def setup_plot(cfg: DictConfig) -> Callable:
     """Set up plot function from config."""
-    plot_proj = mf.train.plot.PlotProj1D(
-        kind="line",
-        maxcols=7,
-    )
-    plot_dist = mf.train.plot.PlotDist2D(
-        fig_kws=None,
-        bins=cfg.plot.bins,
-        limits=(2 * [(-cfg.eval.xmax, +cfg.eval.xmax)])
-    )
+    plot_proj = [
+        mf.train.plot.PlotProj1D(
+            kind="line",
+            maxcols=7,
+        ),
+    ]
+    plot_dist = [
+        mf.train.plot.PlotDistRadial(
+            fig_kws=None,
+            bins=95,
+            rmax=3.5,
+        ),
+    ]
     plot = mf.train.plot.PlotModel(
         dist=make_dist(cfg), 
         n_samples=cfg.plot.size, 
@@ -108,4 +137,3 @@ def setup_eval(cfg: DictConfig) -> Callable:
         return results
 
     return eval
-
