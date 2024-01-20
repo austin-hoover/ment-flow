@@ -59,10 +59,11 @@ class Histogram1D(Histogram):
     """One-dimensional histogram."""
     def __init__(
         self,
-        axis: int,
         bin_edges: torch.Tensor,
         bandwidth: Optional[float] = None,
-        kde=True,
+        axis: int = 0,
+        direction: torch.Tensor = None,
+        kde: bool = True,
         **kws
     ) -> None:
         """Constructor.
@@ -75,6 +76,9 @@ class Histogram1D(Histogram):
             Histogram bin edges.
         bandwidth : float
             Gaussian kernel width relative to bin width (default: 1.0)
+        direction : tensor
+            If provided, the projection is computed along this vector. Otherwise
+            use `axis`.
         **kws
             Key word arguments passed to `Histogram`.
         """
@@ -83,11 +87,14 @@ class Histogram1D(Histogram):
         self.shape = len(bin_edges) - 1
         self.register_buffer("bin_edges", bin_edges)
         self.register_buffer("bin_coords", coords_from_edges(self.bin_edges))
-        self.register_buffer("resolution", bin_edges[1] - bin_edges[0])
+        self.register_buffer("resolution", bin_edges[1] - bin_edges[0])        
         if bandwidth is None:
             bandwidth = 0.5
         self.register_buffer("bandwidth", bandwidth * self.resolution)
         self.kde = kde
+        self.direction = direction
+        if self.direction is not None:
+            self.direction = self.direction / torch.norm(self.direction)
 
     def _forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
@@ -102,15 +109,19 @@ class Histogram1D(Histogram):
         hist : tensor
             The estimated probability density.
         """
-        hist = None
+        data = None
+        if self.direction is None:
+            data = x[:, self.axis]
+        else:
+            data = torch.sum(x * self.direction, dim=1)
         if self.kde:
-            hist = kde_histogram_1d(x[:, self.axis], bin_edges=self.bin_edges, bandwidth=self.bandwidth)
+            hist = kde_histogram_1d(data, bin_edges=self.bin_edges, bandwidth=self.bandwidth)
             return hist
         else:
-            hist = torch.histogram(x[:, self.axis], bins=self.bin_edges, density=True)
+            hist = torch.histogram(data, bins=self.bin_edges, density=True)
             hist = hist.hist
             return hist
-            
+
 
 class Histogram2D(Histogram):
     """Two-dimensional histogram."""
