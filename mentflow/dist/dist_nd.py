@@ -3,6 +3,8 @@ import numpy as np
 from .dist import Distribution
 from .dist import decorrelate
 
+from ..utils import sphere_surface_area
+
 
 class Gaussian(Distribution):
     def __init__(self, **kws):
@@ -41,7 +43,7 @@ class WaterBag(Distribution):
 
 
 class Hollow(Distribution):
-    def __init__(self, exp=0.25, **kws):
+    def __init__(self, exp=0.6, **kws):
         super().__init__(**kws)
         self.exp = exp
         if self.noise is None:
@@ -49,23 +51,28 @@ class Hollow(Distribution):
 
     def _sample(self, n):
         X = KV(d=self.d, rng=self.rng).sample_numpy(n)
-        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** self.exp
+        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** (self.exp / self.d)
         X = X * r[:, None]
         X = X / np.std(X, axis=0)
         return X
 
 
 class Rings(Distribution):
-    def __init__(self, n_rings=2, **kws):
+    def __init__(self, n_rings=2, decay=1.0, **kws):
         super().__init__(**kws)
         self.n_rings = n_rings
+        self.decay = decay
         if self.noise is None:
             self.noise = 0.15
 
     def _sample(self, n):
         n_outer = n // self.n_rings
-        sizes = [n - (self.n_rings - 1) * n_outer] + (self.n_rings - 1) * [n_outer]
-        radii = np.linspace(0.0, 1.0, self.n_rings + 1)[1:]
+        radii = np.linspace(1.0, 0.0, self.n_rings, endpoint=False)[::-1]
+        sizes = np.array([sphere_surface_area(d=self.d, r=r) for r in radii])
+        sizes = sizes * np.linspace(1.0, self.decay * 1.0 / self.n_rings, self.n_rings)
+        sizes = sizes * (n / np.sum(sizes))
+        sizes = sizes.astype(int)
+
         X = []
         dist = KV(d=self.d, rng=self.rng)
         for size, radius in zip(sizes, radii):
