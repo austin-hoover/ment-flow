@@ -96,6 +96,7 @@ def train_mentflow_model(
         plot=plot,
         eval=eval,
         output_dir=output_dir,
+        load_best=cfg.train.load_best,
     )
     
     trainer.train(

@@ -1,6 +1,6 @@
 defaults:
     - base
-    - dist: synth_2d
+    - dist: dist_2d
     - meas: default
     - model: ment
     - train: ment

@@ -1,6 +1,6 @@
 defaults:
     - base
-    - dist: synth_nd
+    - dist: dist_nd
     - meas: default
     - gen: flow
     - model: flow

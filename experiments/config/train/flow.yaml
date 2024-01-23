@@ -1,13 +1,13 @@
 epochs: 20
-iters: 300
+iters: 400
 batch_size: 10000
 
 penalty: 0.0
-penalty_step: 20.0
+penalty_step: 25.0
 penalty_scale: 1.25
 penalty_max: null
 
-lr: 0.005
+lr: 0.0025
 lr_min: 0.001
 lr_drop: 0.1
 lr_patience: 400
@@ -15,3 +15,5 @@ lr_patience: 400
 rtol: -1
 atol: -1
 dmax: 2.50e-04
+
+load_best: true

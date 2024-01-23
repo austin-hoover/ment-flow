@@ -2,8 +2,9 @@ defaults:
     - base
     - dist: dist_2d
     - meas: default
-    - model: ment
-    - train: ment
+    - gen: nn
+    - model: nn
+    - train: nn
     - _self_
 
 d: 2

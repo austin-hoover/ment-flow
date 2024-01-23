@@ -77,10 +77,12 @@ def setup_plot(cfg: DictConfig) -> Callable:
         ),
     ]
     plot_dist = [
-        mf.train.plot.PlotDistRadial(
+        mf.train.plot.PlotDistRadialCDF(
             fig_kws=None,
-            bins=95,
-            rmax=3.5,
+            bins=90,
+            rmax=3.0,
+            kind="line",
+            lw=1.5,
         ),
     ]
     plot = mf.train.plot.PlotModel(

@@ -15,3 +15,5 @@ lr_patience: 400
 dmax: 0
 rtol: -1
 atol: -1
+
+load_best: true
