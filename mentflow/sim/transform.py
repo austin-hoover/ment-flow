@@ -13,6 +13,18 @@ import torch
 import torch.nn as nn
 
 
+def rotation_matrix(angle):
+    _cos = np.cos(angle)
+    _sin = np.sin(angle)
+    return torch.tensor([[_cos, _sin], [-_sin, _cos]])
+
+
+def reverse_momentum(x):
+    for i in range(0, x.shape[1], 2):
+        x[:, i + 1] *= -1.0
+    return x
+
+
 class Transform(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -21,17 +33,14 @@ class Transform(nn.Module):
         raise NotImplementedError
 
     def inverse(self, u: torch.Tensor) -> torch.Tensor:
-        return reverse_momentum(self.forward(reverse_momentum(u)))
+        raise NotImplementedError
 
 
-class CompositeTransform(nn.Module):
+class CompositeTransform(Transform):
     def __init__(self, *transforms) -> None:
         super().__init__()
         self.transforms = nn.Sequential(*transforms)
-
-    def reverse_order(self) -> None:
-        self.transforms = nn.Sequential(*reversed([layer for layer in self.transforms]))
-
+            
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         u = x
         for transform in self.transforms:
@@ -39,9 +48,9 @@ class CompositeTransform(nn.Module):
         return u
 
     def inverse(self, u: torch.Tensor) -> torch.Tensor:
-        self.reverse_order()
-        x = reverse_momentum(self.forward(reverse_momentum(u)))
-        self.reverse_order()
+        x = u
+        for transform in self.transforms[::-1]:
+            x = transform.inverse(x)
         return x
     
     def to(self, device):
@@ -53,13 +62,17 @@ class CompositeTransform(nn.Module):
 class LinearTransform(Transform):
     def __init__(self, matrix: torch.Tensor) -> None:
         super().__init__()
-        self.matrix = matrix
+        self.set_matrix(matrix)
 
     def set_matrix(self, matrix: torch.Tensor) -> None:
         self.matrix = matrix
+        self.matrix_inv = torch.linalg.inv(matrix)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.matmul(x, self.matrix.T)
+
+    def inverse(self, u: torch.Tensor) -> torch.Tensor:
+        return torch.matmul(u, self.matrix_inv.T)
     
     def to(self, device):
         self.matrix = self.matrix.to(device)
@@ -133,29 +146,15 @@ class MultipoleTransform(Transform):
                 U[:, 3] = X[:, 1] + k * zn_imag
         return U
 
+    def inverse(self, u: torch.Tensor) -> torch.Tensor:
+        x = reverse_momentum(self.forward(reverse_momentum(u)))
 
-class ProjectionTransform1D(Transform):
-    """Computes one-dimensional projection."""
+
+class ProjectionTransform(Transform):
     def __init__(self, direction: torch.Tensor):
         super().__init__()
         self.direction = direction / torch.norm(direction)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.sum(x * self.direction, dim=1)[:, None]
-
-    def inverse(self, u: torch.Tensor) -> torch.Tensor:
-        raise ValueError("ProjectionTransform1D is not invertible.")
         
-
-def rotation_matrix(angle):
-    """Return two-dimensional rotation matrix (angle in radians)."""
-    _cos = np.cos(angle)
-    _sin = np.sin(angle)
-    return torch.tensor([[_cos, _sin], [-_sin, _cos]])
-
-
-def reverse_momentum(x):
-    """Reverse particle momenta. Assume order [x, px, y, py, ...]"""
-    for i in range(0, x.shape[1], 2):
-        x[:, i + 1] *= -1.0
-    return x
