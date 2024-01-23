@@ -26,6 +26,7 @@ class Trainer:
         eval=None,
         output_dir=None,
         notebook=False,
+        load_best=True,
     ) -> None:
         
         self.model = model
@@ -36,6 +37,7 @@ class Trainer:
         self.eval = eval
         
         self.notebook = notebook
+        self.load_best = load_best
         
         self.output_dir = output_dir
         if self.output_dir is not None:
@@ -108,8 +110,7 @@ class Trainer:
         The `dmax` parameter defines the convergence condition --- the maximum allowed L1 norm
         of the discrepancy vector D, divided by the length of D. Training will cease after 
         |D| <= dmax * len(D). The ideal stopping point is usually clear from a plot of |D|  and
-        H vs. iteration number. Eventually, a large increase in H will be required for a small 
-        decreases in |D|; we want to stop before this point.
+        H vs. iteration number.
         
         Parameters
         ----------
@@ -199,7 +200,8 @@ class Trainer:
                     self.model.eval()
                     with torch.no_grad():
                         curr_state_dict = self.model.state_dict()
-                        self.model.load_state_dict(best_state_dict)
+                        if self.load_best:
+                            self.model.load_state_dict(best_state_dict)
                         self.eval_model(epoch, iteration)
                         self.plot_model(epoch, iteration, **savefig_kws)
                         self.model.load_state_dict(curr_state_dict)
@@ -263,6 +265,8 @@ class Trainer:
                     return
                 print(converged_message)
                 print("Training one more epoch with same penalty parameter")
+                for group in self.optimizer.param_groups:
+                    group["lr"] *= 0.5
             else:
                 self.model.penalty_parameter *= penalty_scale
                 self.model.penalty_parameter += penalty_step
