@@ -16,6 +16,7 @@ def set_proplot_rc():
     pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
     pplt.rc["cycle"] = "538"
     pplt.rc["grid"] = False
+    pplt.rc["figure.facecolor"] = "white"
 
 
 def plot_image(image, coords=None, ax=None, **kws):
@@ -101,7 +102,7 @@ def plot_dist_2d(x1, x2, fig_kws=None, **kws):
     return fig, axs
 
 
-def plot_dist_radial(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=1.25, **kws):
+def plot_dist_radial_hist(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=1.25, normalize=True, **kws):
     if colors is None:
         colors = ["black", "red"]
 
@@ -114,20 +115,56 @@ def plot_dist_radial(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=
 
     r1 = np.linalg.norm(x1, axis=1)
     r2 = np.linalg.norm(x2, axis=1)
-    hist_r1, _ = np.histogram(r1, bins=bin_edges)
-    hist_r2, _ = np.histogram(r2, bins=bin_edges)
+    hist_r1, _ = np.histogram(r1, bins=bin_edges, density=True)
+    hist_r2, _ = np.histogram(r2, bins=bin_edges, density=True)
 
-    for i in range(len(bin_edges) - 1):
-        rmin = bin_edges[i]
-        rmax = bin_edges[i + 1]
-        hist_r1[i] = hist_r1[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x1.shape[1])
-        hist_r2[i] = hist_r2[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x2.shape[1])
+    if normalize:
+        for i in range(len(bin_edges) - 1):
+            rmin = bin_edges[i]
+            rmax = bin_edges[i + 1]
+            hist_r1[i] = hist_r1[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x1.shape[1])
+            hist_r2[i] = hist_r2[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x2.shape[1])
     
     fig, ax = pplt.subplots(**fig_kws)
     scale = hist_r1.max()
     plot_profile(hist_r1 / scale, bin_edges, ax=ax, color=colors[0], **kws)
     plot_profile(hist_r2 / scale, bin_edges, ax=ax, color=colors[1], **kws)
     ax.format(ymax=ymax)
+    return fig, ax
+
+
+def plot_dist_radial_cdf(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=1.20, plot_gaussian_and_kv=False, **kws):
+    if colors is None:
+        colors = ["black", "red"]
+
+    if fig_kws is None:
+        fig_kws = dict()
+    fig_kws.setdefault("figwidth", 3.0)
+    fig_kws.setdefault("figheight", 2.0)
+
+    bin_edges = np.linspace(0.0, rmax, bins + 1)
+
+    r1 = np.linalg.norm(x1, axis=1)
+    r2 = np.linalg.norm(x2, axis=1)
+    hist_r1, _ = np.histogram(r1, bins=bin_edges, density=True)
+    hist_r2, _ = np.histogram(r2, bins=bin_edges, density=True)
+
+    for i in range(len(bin_edges) - 1):
+        rmin = bin_edges[i]
+        rmax = bin_edges[i + 1]
+        hist_r1[i] = hist_r1[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x1.shape[1])
+        hist_r2[i] = hist_r2[i] / mf.utils.sphere_shell_volume(rmin=rmin, rmax=rmax, d=x2.shape[1])
+
+    # Compute radial cdf.
+    cdf_r1 = np.cumsum(hist_r1)
+    cdf_r2 = np.cumsum(hist_r2)
+    cdf_r1 = cdf_r1 / cdf_r1[-1]
+    cdf_r2 = cdf_r2 / cdf_r2[-1]
+
+    fig, ax = pplt.subplots(**fig_kws)
+    plot_profile(cdf_r1, bin_edges, ax=ax, color=colors[0], **kws)
+    plot_profile(cdf_r2, bin_edges, ax=ax, color=colors[1], **kws)    
+    ax.format(xmin=0.0, ymax=ymax, ymin=0.0)
     return fig, ax
     
 
@@ -180,7 +217,7 @@ class PlotDist2D:
         return fig, axs
 
 
-class PlotDistRadial:
+class PlotDistRadialHist:
     def __init__(self, rmax=5.0, bins=75, fig_kws=None, **kws):
         self.kws = kws
         self.kws["rmax"] = rmax
@@ -188,8 +225,21 @@ class PlotDistRadial:
         self.kws["fig_kws"] = fig_kws
 
     def __call__(self, x1, x2):
-        fig, ax = plot_dist_radial(x1, x2, **self.kws)
+        fig, ax = plot_dist_radial_hist(x1, x2, **self.kws)
         ax.format(xlabel="Radius", ylabel="Normalized density")
+        return fig, ax
+
+
+class PlotDistRadialCDF:
+    def __init__(self, rmax=5.0, bins=75, fig_kws=None, **kws):
+        self.kws = kws
+        self.kws["rmax"] = rmax
+        self.kws["bins"] = bins
+        self.kws["fig_kws"] = fig_kws
+
+    def __call__(self, x1, x2):
+        fig, ax = plot_dist_radial_cdf(x1, x2, **self.kws)
+        ax.format(xlabel="Radius", ylabel="CDF")
         return fig, ax
 
 
