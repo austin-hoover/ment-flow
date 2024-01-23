@@ -265,8 +265,6 @@ class Trainer:
                     return
                 print(converged_message)
                 print("Training one more epoch with same penalty parameter")
-                for group in self.optimizer.param_groups:
-                    group["lr"] *= 0.5
             else:
                 self.model.penalty_parameter *= penalty_scale
                 self.model.penalty_parameter += penalty_step

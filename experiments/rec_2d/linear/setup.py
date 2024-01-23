@@ -30,6 +30,8 @@ def make_transforms(cfg: DictConfig):
     for angle in angles:
         matrix = mf.sim.rotation_matrix(angle)
         matrix = matrix.type(torch.float32)
+        matrix = matrix.to(cfg.device)
         transform = mf.sim.LinearTransform(matrix)
+        transform = transform.to(cfg.device)
         transforms.append(transform)
     return transforms
