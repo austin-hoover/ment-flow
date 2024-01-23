@@ -22,8 +22,7 @@ class KV(Distribution):
 
     def _sample(self, n):
         X = self.rng.normal(size=(n, self.d))
-        X = np.apply_along_axis(lambda row: row / np.linalg.norm(row), 1, X)
-        X = X / np.std(X, axis=0)
+        X = X / np.linalg.norm(X, axis=1)[:, None]
         return X
         
 
@@ -35,15 +34,14 @@ class WaterBag(Distribution):
 
     def _sample(self, n):
         X = KV(d=self.d, rng=self.rng).sample_numpy(n)
-        r = self.rng.uniform(0.0, 1.0, size=n) ** (1.0 / self.d)
+        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** (1.0 / self.d)
         r = r[:, None]
         X = X * r
-        X = X / np.std(X, axis=0)
         return X
 
 
 class Hollow(Distribution):
-    def __init__(self, exp=0.6, **kws):
+    def __init__(self, exp=1.66, **kws):
         super().__init__(**kws)
         self.exp = exp
         if self.noise is None:
@@ -51,9 +49,8 @@ class Hollow(Distribution):
 
     def _sample(self, n):
         X = KV(d=self.d, rng=self.rng).sample_numpy(n)
-        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** (self.exp / self.d)
+        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** (1.0 / (self.exp * self.d))
         X = X * r[:, None]
-        X = X / np.std(X, axis=0)
         return X
 
 
@@ -78,7 +75,6 @@ class Rings(Distribution):
         for size, radius in zip(sizes, radii):
             X.append(radius * dist.sample(size))
         X = np.vstack(X)
-        X = X / np.std(X, axis=0)
         return X
         
 

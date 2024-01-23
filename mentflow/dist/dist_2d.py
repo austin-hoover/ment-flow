@@ -88,7 +88,7 @@ class Gaussian(Dist2D):
     
 
 class Hollow(Dist2D):
-    def __init__(self, exp=0.5, **kws):
+    def __init__(self, exp=1.66, **kws):
         super().__init__(**kws)
         self.exp = exp
         if self.noise is None:
@@ -96,7 +96,7 @@ class Hollow(Dist2D):
 
     def _sample(self, n):
         X = dist_nd.KV(d=self.d, rng=self.rng).sample_numpy(n)
-        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** (self.exp / 2.0)
+        r = self.rng.uniform(0.0, 1.0, size=X.shape[0]) ** (1.0 / (self.exp * self.d))
         X = X * r[:, None]
         X = X / np.std(X, axis=0)
         X = self._process(X)
