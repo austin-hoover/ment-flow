@@ -78,13 +78,14 @@ class Trainer:
             plt.close("all")
 
     def eval_model(self, epoch: int, iteration: int):
-        if self.eval is not None:
-            self.eval(self.model)
+        if self.output_dir is not None:
+            path = self.get_filename("model", epoch, iteration, ext="pt")
+            path = os.path.join(self.checkpoint_dir, path)
+            print(f"Saving file {path}")
+            self.model.save(path)
 
-        path = self.get_filename("model", epoch, iteration, ext="pt")
-        path = os.path.join(self.checkpoint_dir, path)
-        print(f"Saving file {path}")
-        self.model.save(path)
+        if self.eval is not None:
+            return self.eval(self.model)
 
     def train(
         self,
@@ -280,7 +281,6 @@ class Trainer:
         self.model.load_state_dict(best_state_dict)
 
 
-
 class MENTTrainer(Trainer):
     """Trainer for MENT model."""
     def __init__(
@@ -306,6 +306,7 @@ class MENTTrainer(Trainer):
         epochs: int, 
         omega: float = 0.5, 
         savefig_kws: Optional[dict] = None,
+        dmax: float = 0.0,
     ) -> None:
         """Perform Gauss-Seidel iterations."""
         if not savefig_kws:
@@ -334,7 +335,14 @@ class MENTTrainer(Trainer):
             info["D_norm"] = None
             logger.write(info)
         
-            self.eval_model(epoch, iteration)
-            self.plot_model(epoch, iteration, **savefig_kws)        
+            result = self.eval_model(epoch, iteration)
+            self.plot_model(epoch, iteration, **savefig_kws)     
+
+            if "discrepancy" in result:
+                discrepancy = result["discrepancy"] 
+                if discrepancy <= dmax:
+                    print("CONVERGED (dmax)")
+                    return
+                
             if epoch < epochs:
                 self.model.gauss_seidel_iterate(omega=omega)
