@@ -63,6 +63,7 @@ def train_mentflow_model(
     setup_plot: Optional[Callable] = None,
     setup_eval: Optional[Callable] = None,
     output_dir=None,
+    notebook=False,
 ) -> None:
     """Set up MENT-Flow trainer from config, then train the model."""
     if cfg.seed is not None:
@@ -96,6 +97,7 @@ def train_mentflow_model(
         plot=plot,
         eval=eval,
         output_dir=output_dir,
+        notebook=notebook,
         load_best=cfg.train.load_best,
     )
     
@@ -223,6 +225,7 @@ def train_ment_model(
     setup_plot=None,
     setup_eval=None,
     output_dir=None,
+    notebook=False,
 ) -> None:
     """Set up MENT trainer from config, then train the model."""
     if cfg.seed is not None:
@@ -241,8 +244,11 @@ def train_ment_model(
         eval=eval,
         plot=plot,
         output_dir=output_dir,
+        notebook=notebook,
     )
     trainer.train(
         epochs=cfg.train.epochs, 
         omega=cfg.train.omega,
+        dmax=cfg.train.dmax,
+        savefig_kws=dict(ext=cfg.plot.ext, dpi=cfg.plot.dpi),
     )
