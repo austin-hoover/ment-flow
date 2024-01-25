@@ -147,7 +147,7 @@ class MultipoleTransform(Transform):
         return U
 
     def inverse(self, u: torch.Tensor) -> torch.Tensor:
-        x = reverse_momentum(self.forward(reverse_momentum(u)))
+        return reverse_momentum(self.forward(reverse_momentum(u)))
 
 
 class ProjectionTransform(Transform):

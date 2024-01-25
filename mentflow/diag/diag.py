@@ -122,6 +122,12 @@ class Histogram1D(Histogram):
             hist = hist.hist
             return hist
 
+    def to(self, device):
+        self.bin_edges = self.bin_edges.to(device)
+        self.bin_coords = self.bin_coords.to(device)
+        self.device = device
+        return self
+
 
 class Histogram2D(Histogram):
     """Two-dimensional histogram."""
