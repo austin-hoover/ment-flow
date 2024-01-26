@@ -15,11 +15,11 @@ for model in ${model_list[@]}; do
         for meas_num in ${meas_num_list[@]}; do
             echo $meas_num
             if [ "$model" == "flow" ]; then
-                python train_flow.py dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size
+                python train_flow.py dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size train.dmax=0.00025
             elif [ "$model" == "nn" ]; then
-                python train_nn.py   dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size
+                python train_nn.py   dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size train.dmax=0.00025
             elif [ "$model" == "ment" ]; then
-                python train_ment.py dist.name=$dist meas.num=$meas_num device=mps seed=$seed
+                python train_ment.py dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.dmax=0.00025 train.omega=0.25 train.epochs=15
             else
                 echo "invalid model"
             fi            

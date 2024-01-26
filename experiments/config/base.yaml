@@ -24,5 +24,6 @@ plot:
     bins: 125
     ext: png
     dpi: 300
+    line_kind: "line"
 
 d: 2

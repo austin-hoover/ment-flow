@@ -8,3 +8,9 @@ defaults:
     - _self_
 
 d: 2
+meas:
+    num: 4
+    max_angle: 90.0
+    mult_order: 3
+    max_mult_strength: 1.5
+    xmax: 4.5

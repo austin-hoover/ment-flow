@@ -46,8 +46,8 @@ def make_dist(cfg: DictConfig) -> mf.dist.Distribution:
 def setup_plot(cfg: DictConfig) -> Callable:
     """Set up plot function from config."""
     plot_proj = mf.train.plot.PlotProj1D(
-        kind="line",
         maxcols=7,
+        kind=cfg.plot.line_kind,
     )
     plot_dist = mf.train.plot.PlotDist2D(
         fig_kws=None,
@@ -58,7 +58,7 @@ def setup_plot(cfg: DictConfig) -> Callable:
         dist=make_dist(cfg), 
         n_samples=cfg.plot.size, 
         plot_proj=plot_proj, 
-        plot_dist=plot_dist, 
+        plot_dist=plot_dist,
         device=cfg.device,
     )
     return plot

@@ -109,14 +109,14 @@ class MultipoleTransform(Transform):
         else:
             y = 0.0 * X[:, 0]
 
-        ## MPS does not support complex.        
+        ## MPS does not support torch.complex.        
         # z = torch.complex(x, y)
         # zn = torch.pow(z, float(self.order - 1))
         # zn = z ** (self.order - 1)
         # zn_imag = zn.imag
         # zn_real = zn.real
 
-        ## Hard-code a few values of n for now.
+        ## Hard-code a few values of n.
         if self.order == 1:
             zn_real = 1.0
             zn_imag = 1.0

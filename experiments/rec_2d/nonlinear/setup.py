@@ -9,7 +9,7 @@ from experiments.setup import train_mentflow_model
 from experiments.setup import setup_ment_model
 from experiments.setup import train_ment_model
 from experiments.setup import generate_training_data
-from experiments.rec_2d.setup import make_diagnostic
+from experiments.rec_2d.setup import make_diagnostics
 from experiments.rec_2d.setup import make_dist
 from experiments.rec_2d.setup import setup_eval
 from experiments.rec_2d.setup import setup_plot
@@ -19,25 +19,24 @@ mf.train.plot.set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig):
+    """Generate rotation matrix transforms for uniformly spaced angles."""
     transforms = []
 
     ## Constant linear focusing, varying multipole.
-    order = 4
-    strength_max = +1.0
+    order = cfg.meas.mult_order
+    strength_max = +cfg.meas.max_mult_strength
     strength_min = -strength_max
     strengths = np.linspace(strength_min, strength_max, cfg.meas.num)
-
-    angles = np.radians(np.linspace(0.0, 180.0, cfg.meas.num, endpoint=False))
     
-    for strength, angle in zip(strengths, angles):
+    for strength in strengths:
         multipole = mf.sim.MultipoleTransform(order=order, strength=strength)
     
+        angle = np.radians(cfg.meas.max_angle)
         matrix = mf.sim.rotation_matrix(angle)
         matrix = matrix.type(torch.float32)
-        transform = mf.sim.LinearTransform(matrix)
+        rotation = mf.sim.LinearTransform(matrix)
         
-        transform = mf.sim.CompositeTransform(multipole, transform)
-        
+        transform = mf.sim.CompositeTransform(multipole, rotation)
         transforms.append(transform)
-
+        
     return transforms
