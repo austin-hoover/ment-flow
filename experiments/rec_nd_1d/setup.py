@@ -4,6 +4,7 @@ from typing import List
 
 import numpy as np
 import torch
+import proplot as pplt
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
@@ -31,7 +32,7 @@ def make_transforms(cfg: DictConfig):
     
     transforms = []
     for direction in directions:
-        transform = mf.sim.ProjectionTransform1D(direction)
+        transform = mf.sim.ProjectionTransform(direction)
         transforms.append(transform)
     return transforms
 
@@ -79,10 +80,20 @@ def setup_plot(cfg: DictConfig) -> Callable:
     plot_dist = [
         mf.train.plot.PlotDistRadialCDF(
             fig_kws=None,
-            bins=90,
+            bins=65,
             rmax=3.0,
-            kind="line",
+            kind="step",
             lw=1.5,
+        ),
+        mf.train.plot.PlotDistCorner(
+            bins=64,
+            discrete=False, 
+            limits=(cfg.d * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
+            cmaps=[
+                pplt.Colormap("blues"),
+                pplt.Colormap("reds")
+            ],
+            colors=["blue6", "red6"],
         ),
     ]
     plot = mf.train.plot.PlotModel(

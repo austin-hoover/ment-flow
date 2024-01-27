@@ -47,6 +47,13 @@ def load_mentflow_model(cfg: dict, checkpoint_path: str, device=None) -> mf.MENT
     """Load MENT-Flow model architecture (from cfg) and parameters (from checkpoint_path)."""
     model = setup_mentflow_model(cfg, transforms=None, diagnostics=None, measurements=None)
     model.load(checkpoint_path, device)
+
+    ## temp
+    if type(model.gen) is mf.gen.NNGen:
+        loc = torch.zeros((cfg.d,), device=device)
+        cov = torch.eye(cfg.d, device=device)
+        model.gen.base = torch.distributions.MultivariateNormal(loc, cov)
+    
     return model
 
 

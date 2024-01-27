@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from pprint import pprint
 
 import mentflow as mf
 
@@ -12,7 +11,7 @@ import setup
 
 @hydra.main(version_base=None, config_path="../../config", config_name="rec_2d_nonlinear_flow.yaml")
 def main(cfg: DictConfig):
-    pprint(OmegaConf.to_container(cfg))
+    print(OmegaConf.to_yaml(cfg))
 
     transforms, diagnostics, measurements = setup.generate_training_data(
         cfg,
