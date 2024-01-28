@@ -53,11 +53,12 @@ def sample_hist_torch(hist, bin_edges=None, n=1):
 
 
 class GridSampler:
-    def __init__(self, limits=None, res=50, device=None):
+    def __init__(self, limits=None, res=50, noise=0.0, device=None):
         self.device = device
         self.res = res
         self.limits = limits
         self.d = len(limits)
+        self.noise = noise
         self.initialize(limits=limits, res=res)
         self.to(device)
 
@@ -97,4 +98,10 @@ class GridSampler:
         values = values.reshape(self.shape)
         x = sample_hist_torch(values, bin_edges=self.grid_edges, n=n)
         x = self.send(x)
+        if self.noise:
+            for j in range(x.shape[1]):
+                delta = self.noise * (self.grid_edges[j][1] - self.grid_edges[j][0])
+                noise = torch.rand(x.shape[0], device=self.device) - 0.5
+                noise = noise * delta
+                x[:, j] = x[:, j] + noise
         return x
