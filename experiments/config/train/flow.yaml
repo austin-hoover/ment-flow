@@ -7,7 +7,7 @@ penalty_step: 25.0
 penalty_scale: 1.25
 penalty_max: null
 
-lr: 0.0025
+lr: 0.001
 lr_min: 0.001
 lr_drop: 0.1
 lr_patience: 400

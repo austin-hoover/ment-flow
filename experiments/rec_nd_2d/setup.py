@@ -23,34 +23,39 @@ mf.train.plot.set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig):
-    """Generate rotation matrix transforms for uniformly spaced angles."""
-    device = torch.device(cfg.device)
-    
-    generator = torch.Generator(device=device)
-    if cfg.seed is not None:
-        generator.manual_seed(cfg.seed)
-
-    directions = torch.randn((cfg.meas.num, cfg.d), generator=generator, device=device)
-    directions = directions / torch.norm(directions, dim=1)[:, None]
-    
     transforms = []
-    for direction in directions:
-        transform = mf.sim.ProjectionTransform(direction)
-        transforms.append(transform)
+    
+    if cfg.meas.optics == "corner":
+        transforms = []
+        axis_meas = (0, 2)
+        for i in range(cfg.d):
+            for j in range(i):
+                matrices = []
+                for k, l in zip(axis_meas, (j, i)):
+                    matrix = torch.eye(cfg.d)
+                    matrix[k, k] = matrix[l, l] = 0.0
+                    matrix[k, l] = matrix[l, k] = 1.0
+                    matrix = matrix.float()
+                    matrices.append(matrix)
+                matrix = torch.linalg.multi_dot(matrices[::-1])
+                
+                transform = mf.sim.LinearTransform(matrix)
+                transform = transform.to(cfg.device)
+                transforms.append(transform)
+                
     return transforms
-
+            
 
 def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
-    """Make one-dimensional histogram diagnostic."""
     device = torch.device(cfg.device)
     
-    bin_edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
-    bin_edges = bin_edges.type(torch.float32)
-    bin_edges = bin_edges.to(device)
-
-    diagnostic = mf.diag.Histogram1D(
-        axis=0,
-        bin_edges=bin_edges, 
+    bin_edges = [
+        torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1),
+        torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1),
+    ]
+    diagnostic = mf.diag.Histogram2D(
+        axis=(0, 2),
+        bin_edges=bin_edges,
         noise_scale=cfg.meas.noise_scale, 
         noise_type=cfg.meas.noise_type,
         bandwidth=cfg.meas.bandwidth,
@@ -75,10 +80,7 @@ def make_dist(cfg: DictConfig) -> mf.dist.Distribution:
 def setup_plot(cfg: DictConfig) -> Callable:
     """Set up plot function from config."""
     plot_proj = [
-        mf.train.plot.PlotProj1D(
-            kind="line",
-            maxcols=7,
-        ),
+        mf.train.plot.PlotProj2D(),
     ]
     plot_dist = [
         mf.train.plot.PlotDistRadialCDF(

@@ -1,0 +1,1 @@
+Reconstruct an $n$-dimensional distribution from its $n (n - 1) / 2$ two-dimensional marginals.

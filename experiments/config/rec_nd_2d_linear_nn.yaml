@@ -7,10 +7,11 @@ defaults:
     - _self_
 
 meas:
-    num: 30
+    num: 6
+    optics: "corner"
 
 train:
-    batch_size: 50000
+    batch_size: 30000
     dmax: 0.0001
 
-d: 4
+d: 6

@@ -12,6 +12,14 @@ hydra:
             _target_: experiments.callback.GitSHACallback
     output_subdir: ".hydra"
 
+meas:
+    num: 6
+    xmax: 3.5
+    bins: 85
+    noise_scale: 0.0
+    noise_type: "gaussian"
+    bandwidth: 0.5
+
 eval:
     freq: null
     size: 50000

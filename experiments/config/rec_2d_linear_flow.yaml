@@ -1,7 +1,6 @@
 defaults:
     - base
     - dist: dist_2d
-    - meas: default
     - gen: flow
     - model: flow
     - train: flow

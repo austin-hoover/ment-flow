@@ -1,4 +1,6 @@
 """Tools to set up experiments from config."""
+import os
+import math
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -127,48 +129,50 @@ def generate_training_data(
 
     This function creates the same set of diagnostic for each transform.
     """
-    device = torch.device(cfg.device)
-    send = lambda x: x.type(torch.float32).to(device)
-
-    if cfg.seed is not None:
-        torch.manual_seed(cfg.seed)
+    with torch.no_grad():
+        device = torch.device(cfg.device)
+        send = lambda x: x.type(torch.float32).to(device)
     
-    # Define transforms.
-    transforms = make_transforms(cfg)
-    transforms = [transform.to(device) for transform in transforms]
-    
-    # Create histogram diagnostic.
-    diagnostics = make_diagnostics(cfg)
-    diagnostics = [diagnostics for transform in transforms]
-
-    # Generate samples from input distribution.
-    dist = make_dist(cfg)
-    x = dist.sample(cfg.dist.size)
-    x = send(x)
-
-    # Simulate measurements.
-    for diagnostic in unravel(diagnostics):
-        diagnostic.kde = False        
-        diagnostic.noise = True
+        if cfg.seed is not None:
+            torch.manual_seed(cfg.seed)
         
-    measurements = mf.sim.forward(x, transforms, diagnostics)
+        # Define transforms.
+        transforms = make_transforms(cfg)
+        transforms = [transform.to(device) for transform in transforms]
+        
+        # Create histogram diagnostic.
+        diagnostics = make_diagnostics(cfg)
+        diagnostics = [diagnostics for transform in transforms]
     
-    for diagnostic in unravel(diagnostics):
-        diagnostic.kde = True
-        diagnostic.noise = False
+        # Generate samples from input distribution.
+        dist = make_dist(cfg)
+        x = dist.sample(cfg.dist.size)
+        x = send(x)
 
-    # Renormalize measurements in case there was noise.
-    for i in range(len(measurements)):
-        for j in range(len(measurements[i])):
-            measurement = measurements[i][j]
-            diagnostic  = diagnostics[i][j]
-            bin_volume = 1.0
-            if measurement.ndim == 1:
-                bin_volume = diagnostic.bin_edges[1] - diagnostic.bin_edges[0]
-            else:
-                bin_volume = torch.prod([e[1] - e[0] for e in diagnostic.bin_edges])
-            measurement = measurement / measurement.sum() / bin_volume
-            measurements[i][j] = measurement
+        # Simulate measurements.
+        for diagnostic in unravel(diagnostics):
+            diagnostic.kde = False        
+            diagnostic.noise = True
+
+
+        measurements = mf.sim.forward(x, transforms, diagnostics)
+        
+        for diagnostic in unravel(diagnostics):
+            diagnostic.kde = True
+            diagnostic.noise = False
+    
+        # Renormalize measurements in case there was noise.
+        for i in range(len(measurements)):
+            for j in range(len(measurements[i])):
+                measurement = measurements[i][j]
+                diagnostic  = diagnostics[i][j]
+                bin_volume = 1.0
+                if measurement.ndim == 1:
+                    bin_volume = diagnostic.bin_edges[1] - diagnostic.bin_edges[0]
+                else:
+                    bin_volume = math.prod([e[1] - e[0] for e in diagnostic.bin_edges])
+                measurement = measurement / measurement.sum() / bin_volume
+                measurements[i][j] = measurement
 
     return (transforms, diagnostics, measurements)
 
@@ -195,7 +199,12 @@ def setup_ment_model(
             grid_xmax = cfg.eval.xmax
         grid_limits = d * [(-grid_xmax, grid_xmax)]
         grid_res = cfg.model.sampler_res
-        sampler = mf.sample.GridSampler(limits=grid_limits, res=grid_res, device=cfg.device)
+        sampler = mf.sample.GridSampler(
+            limits=grid_limits, 
+            res=grid_res, 
+            device=cfg.device, 
+            noise=cfg.model.sampler_noise,
+        )
 
     integration_grid_limits = [(-cfg.model.integration_xmax, +cfg.model.integration_xmax)]
     integration_grid_shape = (cfg.model.integration_res,)
@@ -214,6 +223,7 @@ def setup_ment_model(
         integration_grid_shape=integration_grid_shape,
         n_samples=cfg.train.batch_size,
         device=cfg.device,
+        verbose=cfg.model.verbose,
     )
     model.to(cfg.device)
     return model

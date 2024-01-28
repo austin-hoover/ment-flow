@@ -1,7 +1,6 @@
 defaults:
     - base
     - dist: dist_2d
-    - meas: default
     - model: ment
     - train: ment
     - _self_

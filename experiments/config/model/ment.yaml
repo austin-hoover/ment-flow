@@ -11,3 +11,6 @@ integration_res: 300
 sampler: "grid"
 sampler_xmax: null
 sampler_res: 200
+sampler_noise: 0.0
+
+verbose: false

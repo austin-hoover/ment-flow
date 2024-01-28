@@ -1,12 +1,11 @@
 defaults:
     - base
-    - dist: dist_2d
+    - dist: dist_nd
     - model: ment
     - train: ment
     - _self_
 
 meas:
-    min_angle: 0.0
-    max_angle: 180.0
+    num: 30
 
-d: 2
+d: 4
