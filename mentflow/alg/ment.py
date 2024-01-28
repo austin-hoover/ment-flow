@@ -206,9 +206,11 @@ class MENT:
         integration_grid_limits: List[Tuple[float]] = None,
         integration_grid_shape: Tuple[int] = None,
         n_samples: int = 1000000,
+        verbose=False,
     ) -> None:
         """Constructor."""
         self.device = device
+        self.verbose = verbose
 
         self.d = d
         self.epoch = 0
@@ -274,7 +276,7 @@ class MENT:
         if self.d_meas == 1:
             bin_volume = diagnostic.bin_edges[1] - diagnostic.bin_edges[0]
         else:
-            bin_volume = torch.prod((e[1] - e[0]) for e in diagnostic.bin_edges)
+            bin_volume = math.prod((e[1] - e[0]) for e in diagnostic.bin_edges)
         return projection / projection.sum() / bin_volume
 
     def initialize_lagrange_functions(self) -> None:
@@ -500,6 +502,8 @@ class MENT:
             h -> h * (1 + omega * ((g / g*) - 1))
         """ 
         for index, transform in enumerate(self.transforms):
+            if self.verbose:
+                print(f"index={index}")
             # Get simulated projection, measured projection, and lagrange function.
             prediction = self._simulate(index)
             measurement = self.measurements[index][0]
