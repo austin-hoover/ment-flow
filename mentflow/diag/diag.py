@@ -190,12 +190,24 @@ class Histogram2D(Histogram):
             )
             return hist
         else:
-            hist = torch.histogramdd(
-                x[:, self.axis],
-                bins=self.bin_edges,
+            ## MPS throws error for histogramdd. Convert to numpy for now.
+            ## (We only call this function during evaluation or data generation.)
+            
+            # hist = torch.histogramdd(
+            #     x[:, self.axis],
+            #     bins=self.bin_edges,
+            #     density=True,
+            # )
+            # hist = hist.hist
+
+            hist, _ = np.histogramdd(
+                x[:, self.axis].detach().cpu().numpy(),
+                bins=[e.detach().cpu().numpy() for e in self.bin_edges],
                 density=True,
             )
-            hist = hist.hist
+            hist = torch.from_numpy(hist)
+            hist = hist.type(torch.float32).to(self.device)
+            
             return hist
 
     def to(self, device):
