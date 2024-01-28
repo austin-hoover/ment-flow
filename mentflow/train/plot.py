@@ -69,7 +69,7 @@ def plot_proj_1d(
 ):
     """Plots measured vs. predicted one-dimensional profiles."""
     if colors is None:
-        colors = ["black", "red"]
+        colors = ["red4", "black"]
         
     ncols = min(len(y_meas), maxcols)
     nrows = int(np.ceil(len(y_meas) / ncols))    
@@ -84,6 +84,41 @@ def plot_proj_1d(
         if y_pred is not None:
             plot_profile(y_pred[index] / scale, edges[index], ax=ax, color=colors[1], **kws)
     axs.format(ymax=ymax)
+    return fig, axs
+
+
+def plot_proj_2d(
+    y_meas,
+    y_pred,
+    edges,
+    maxcols=8,
+    ymax=1.25,
+    fig_kws=None,
+    **kws
+):
+    """Plots measured vs. predicted two-dimensional profiles."""        
+    if fig_kws is None:
+        fig_kws = dict()
+    fig_kws.setdefault("xticks", [])
+    fig_kws.setdefault("yticks", [])
+    fig_kws.setdefault("xspineloc", "neither")
+    fig_kws.setdefault("yspineloc", "neither")
+    fig_kws.setdefault("space", 0.0)
+    
+    ncols = min(len(y_meas), maxcols)
+    nrows = 2 * int(np.ceil(len(y_meas) / ncols))
+    figwidth = min(1.75 * ncols, 10.0)
+    fig, axs = pplt.subplots(ncols=ncols, nrows=nrows, figwidth=figwidth, **fig_kws)
+
+    i = 0
+    for row in range(0, nrows, 2):
+        for col in range(ncols):    
+            if i < len(y_meas):
+                ax_index = row * ncols + col
+                scale = np.max(y_meas[i])        
+                plot_image(y_meas[i] / scale, edges[i], ax=axs[ax_index], **kws)
+                plot_image(y_pred[i] / scale, edges[i], ax=axs[ax_index + ncols], **kws)
+            i += 1
     return fig, axs
 
 
@@ -102,9 +137,9 @@ def plot_dist_2d(x1, x2, fig_kws=None, **kws):
     return fig, axs
 
 
-def plot_dist_radial_hist(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=1.25, normalize=True, **kws):
+def plot_dist_radial_hist(x1, x2, rmax=3.5, bins=50, fig_kws=None, colors=None, ymax=1.25, normalize=True, **kws):
     if colors is None:
-        colors = ["black", "red"]
+        colors = ["red4", "black"]
 
     if fig_kws is None:
         fig_kws = dict()
@@ -133,9 +168,9 @@ def plot_dist_radial_hist(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, 
     return fig, ax
 
 
-def plot_dist_radial_cdf(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, ymax=1.20, plot_gaussian_and_kv=False, **kws):
+def plot_dist_radial_cdf(x1, x2, rmax=3.5, bins=50, fig_kws=None, colors=None, ymax=1.20, plot_gaussian_and_kv=False, **kws):
     if colors is None:
-        colors = ["black", "red"]
+        colors = ["red4", "black"]
 
     if fig_kws is None:
         fig_kws = dict()
@@ -166,63 +201,52 @@ def plot_dist_radial_cdf(x1, x2, rmax=3.5, bins=80, fig_kws=None, colors=None, y
     plot_profile(cdf_r2, bin_edges, ax=ax, color=colors[1], **kws)    
     ax.format(xmin=0.0, ymax=ymax, ymin=0.0)
     return fig, ax
+
+
+def plot_dist_corner(x1, x2, cmaps=None, colors=None, **kws):
+    import psdist.visualization as psv    
+
+    if cmaps is None:
+        cmaps = [
+            pplt.Colormap("blues"),
+            pplt.Colormap("reds"),
+        ]
+    if colors is None:
+        colors = ["blue6", "red6"]
     
+    grid = psv.CornerGrid(d=x1.shape[1], corner=False)
+    grid.plot_points(x1, upper=False, lower=True, cmap=cmaps[0], diag_kws=dict(color=colors[0]), **kws)
+    grid.plot_points(x2, lower=False, upper=True, cmap=cmaps[1], diag_kws=dict(color=colors[1]), **kws)
+    return (grid.fig, grid.axs)
+        
 
 class PlotProj1D:
-    def __init__(
-        self,
-        maxcols=7,
-        height=1.3,
-        colors=None,
-        ymax=1.25,
-        **kws
-    ):    
-        """Plots measured vs. predicted one-dimensional profiles."""
-        self.maxcols = maxcols
-        self.height = height
-        self.colors = colors
-        if self.colors is None:
-            self.colors = ["black", "red"]
-        self.ymax = ymax
+    def __init__(self, **kws):    
         self.kws = kws
         
     def __call__(self, y_meas=None, y_pred=None, edges=None):
-        fig, axs = plot_proj_1d(
-            y_meas,
-            y_pred,
-            edges,
-            maxcols=self.maxcols,
-            height=self.height,
-            colors=self.colors,
-            ymax=self.ymax,
-            **self.kws
-        )
-        return fig, axs
-        
+        return plot_proj_1d(y_meas, y_pred, edges, **self.kws)
+
+
+class PlotProj2D:
+    def __init__(self, **kws):
+        self.kws = kws
+
+    def __call__(self, y_meas=None, y_pred=None, edges=None):
+        return plot_proj_2d(y_meas, y_pred, edges, **self.kws)
+
 
 class PlotDist2D:
-    """Plots two-dimensional histograms side-by-side."""
-    def __init__(self, fig_kws=None, **kws):
-        self.fig_kws = fig_kws
-        if self.fig_kws  is None:
-            self.fig_kws  = dict()
-        self.fig_kws.setdefault("xspineloc", "neither")
-        self.fig_kws.setdefault("yspineloc", "neither")
-        self.fig_kws.setdefault("space", 0.0)
-        self.fig_kws.setdefault("share", False)
+    def __init__(self, **kws):
         self.kws = kws
 
     def __call__(self, x1, x2):
-        fig, axs = plot_dist_2d(x1, x2, fig_kws=self.fig_kws, **self.kws)
-        return fig, axs
+        return plot_dist_2d(x1, x2, **self.kws)
 
 
 class PlotDistRadialHist:
-    def __init__(self, rmax=5.0, bins=75, fig_kws=None, **kws):
+    def __init__(self, **kws):
         self.kws = kws
-        self.kws["rmax"] = rmax
-        self.kws["bins"] = bins
-        self.kws["fig_kws"] = fig_kws
 
     def __call__(self, x1, x2):
         fig, ax = plot_dist_radial_hist(x1, x2, **self.kws)
@@ -231,11 +255,8 @@ class PlotDistRadialHist:
 
 
 class PlotDistRadialCDF:
-    def __init__(self, rmax=5.0, bins=75, fig_kws=None, **kws):
+    def __init__(self, **kws):
         self.kws = kws
-        self.kws["rmax"] = rmax
-        self.kws["bins"] = bins
-        self.kws["fig_kws"] = fig_kws
 
     def __call__(self, x1, x2):
         fig, ax = plot_dist_radial_cdf(x1, x2, **self.kws)
@@ -243,11 +264,15 @@ class PlotDistRadialCDF:
         return fig, ax
 
 
-class PlotModel:
-    """Visualize predicted distribution and projections.
+class PlotDistCorner:
+    def __init__(self, **kws):
+        self.kws = kws
+    def __call__(self, x2, x1):
+        return plot_dist_corner(x1, x2, **self.kws)
 
-    This class should work for any input/output dimension.
-    """
+
+class PlotModel:
+    """Visualize predicted distribution and projections."""
     def __init__(
         self, 
         dist: Callable,
@@ -310,16 +335,18 @@ class PlotModel:
                 figs.append(fig)
         
         ## Plot measured vs. simulated projections.
-        y_meas = [grab(measurement) for measurement in unravel(model.measurements)]
-        y_pred = [grab(prediction) for prediction in unravel(predictions)]
-        edges = []
-        for index, transform in enumerate(model.transforms):
-            for diagnostic in model.diagnostics[index]:
-                edges.append(grab(diagnostic.bin_edges))
-
         if self.plot_proj is not None:
+            y_meas = [grab(measurement) for measurement in unravel(model.measurements)]
+            y_pred = [grab(prediction) for prediction in unravel(predictions)]
+            edges = []
+            for index, transform in enumerate(model.transforms):
+                for diagnostic in model.diagnostics[index]:
+                    if type(diagnostic.bin_edges) in [tuple, list]:
+                        edges.append([grab(e) for e in diagnostic.bin_edges])
+                    else:
+                        edges.append(grab(diagnostic.bin_edges))
             for function in self.plot_proj:
                 fig, axs = function(y_meas, y_pred, edges)
                 figs.append(fig)
-        
+
         return figs
