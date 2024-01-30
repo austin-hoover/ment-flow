@@ -137,7 +137,7 @@ def plot_dist_2d(x1, x2, fig_kws=None, **kws):
     return fig, axs
 
 
-def plot_dist_radial_hist(x1, x2, rmax=3.5, bins=50, fig_kws=None, colors=None, ymax=1.25, normalize=True, **kws):
+def plot_dist_radial_pdf(x1, x2, rmax=3.5, bins=50, fig_kws=None, colors=None, ymax=1.25, normalize=True, **kws):
     if colors is None:
         colors = ["red4", "black"]
 
@@ -244,12 +244,12 @@ class PlotDist2D:
         return plot_dist_2d(x1, x2, **self.kws)
 
 
-class PlotDistRadialHist:
+class PlotDistRadialPDF:
     def __init__(self, **kws):
         self.kws = kws
 
     def __call__(self, x1, x2):
-        fig, ax = plot_dist_radial_hist(x1, x2, **self.kws)
+        fig, ax = plot_dist_radial_pdf(x1, x2, **self.kws)
         ax.format(xlabel="Radius", ylabel="Normalized density")
         return fig, ax
 
