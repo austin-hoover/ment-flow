@@ -43,7 +43,7 @@ def make_transforms(cfg: DictConfig):
                 transform = transform.to(cfg.device)
                 transforms.append(transform)
                 
-    return transforms[:-1]
+    return transforms
             
 
 def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
