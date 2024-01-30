@@ -9,7 +9,7 @@ import mentflow as mf
 import setup
 
 
-@hydra.main(version_base=None, config_path="../config", config_name="rec_nd_2d_linear_flow.yaml")
+@hydra.main(version_base=None, config_path="../config", config_name="rec_nd_2d_flow.yaml")
 def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
 

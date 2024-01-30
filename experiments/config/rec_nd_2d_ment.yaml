@@ -1,0 +1,17 @@
+defaults:
+    - base
+    - dist: dist_nd
+    - model: ment
+    - train: ment
+    - _self_
+
+meas:
+    num: 6
+    optics: corner
+
+model:
+    mode: sample
+    sampler_res: 45
+    sampler_noise: 0.0
+
+d: 4

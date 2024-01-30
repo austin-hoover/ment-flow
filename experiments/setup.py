@@ -1,6 +1,7 @@
 """Tools to set up experiments from config."""
 import os
 import math
+import warnings
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -206,8 +207,15 @@ def setup_ment_model(
             noise=cfg.model.sampler_noise,
         )
 
-    integration_grid_limits = [(-cfg.model.integration_xmax, +cfg.model.integration_xmax)]
-    integration_grid_shape = (cfg.model.integration_res,)
+    # Get the measured dimension.
+    if measurements is None:
+        warnings.warn("No measurements provided. Assuming d_meas=1.")
+        d_meas = 1
+    else:
+        d_meas = list(unravel(measurements))[0].ndim
+    d_int = d - d_meas
+    integration_grid_limits = d_int * [(-cfg.model.integration_xmax, +cfg.model.integration_xmax)]
+    integration_grid_shape = tuple(d_int * [cfg.model.integration_res])
     
     model = mf.alg.ment.MENT(
         d=d,

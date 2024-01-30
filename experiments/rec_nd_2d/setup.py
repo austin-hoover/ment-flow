@@ -43,7 +43,7 @@ def make_transforms(cfg: DictConfig):
                 transform = transform.to(cfg.device)
                 transforms.append(transform)
                 
-    return transforms
+    return transforms[:-1]
             
 
 def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
@@ -83,10 +83,17 @@ def setup_plot(cfg: DictConfig) -> Callable:
         mf.train.plot.PlotProj2D(),
     ]
     plot_dist = [
+        mf.train.plot.PlotDistRadialPDF(
+            fig_kws=None,
+            bins=50,
+            rmax=3.5,
+            kind="step",
+            lw=1.5,
+        ),
         mf.train.plot.PlotDistRadialCDF(
             fig_kws=None,
-            bins=65,
-            rmax=3.0,
+            bins=50,
+            rmax=3.5,
             kind="step",
             lw=1.5,
         ),

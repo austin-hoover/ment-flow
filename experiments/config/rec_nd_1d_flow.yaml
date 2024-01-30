@@ -7,13 +7,11 @@ defaults:
     - _self_
 
 meas:
-    num: 30
-    optics: "isotropic"
+    num: 50
+    optics: isotropic
 
 train:
-    batch_size: 40000
+    batch_size: 30000
     dmax: 0.0001
-    # penalty_scale: 1.05
-    # penalty_step: 50.0
 
 d: 4

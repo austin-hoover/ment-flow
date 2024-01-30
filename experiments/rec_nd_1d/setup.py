@@ -81,10 +81,17 @@ def setup_plot(cfg: DictConfig) -> Callable:
         ),
     ]
     plot_dist = [
+        mf.train.plot.PlotDistRadialPDF(
+            fig_kws=None,
+            bins=50,
+            rmax=3.5,
+            kind="step",
+            lw=1.5,
+        ),
         mf.train.plot.PlotDistRadialCDF(
             fig_kws=None,
-            bins=65,
-            rmax=3.0,
+            bins=50,
+            rmax=3.5,
             kind="step",
             lw=1.5,
         ),
