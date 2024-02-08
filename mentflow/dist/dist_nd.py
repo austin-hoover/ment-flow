@@ -12,6 +12,31 @@ class Gaussian(Distribution):
 
     def _sample(self, n):
         return self.rng.normal(size=(n, self.d))
+
+
+class GaussianMixture(Distribution):
+    def __init__(self, modes=7, xmax=3.0, scale=0.75, **kws):
+        super().__init__(**kws)
+
+        self.modes = modes
+        self.locs = self.rng.uniform(-xmax, xmax, size=(self.modes, self.d))
+        self.scales = np.ones(self.modes)
+
+    def prob(self, x: np.ndarray) -> np.ndarray:
+        prob = np.zeros(x.shape[0])
+        for scale, loc in zip(self.scales, self.locs):
+            prob += np.exp(-0.5 * np.sum(((x - loc) / scale)**2, axis=1))
+        return prob / self.modes
+
+    def _sample(self, n: int) -> np.ndarray:
+        x = [
+            self.rng.normal(loc=loc, scale=scale, size=(n // self.modes, self.d))
+            for scale, loc in zip(self.scales, self.locs)
+        ]
+        x = np.vstack(x)
+        x = x - np.mean(x, axis=0)
+        x = x / np.std(x, axis=0)
+        return x
         
 
 class KV(Distribution):
@@ -85,6 +110,7 @@ class Rings(Distribution):
 
 DISTRIBUTIONS = {
     "gaussian": Gaussian,
+    "gaussian_mixture": GaussianMixture,
     "kv": KV,
     "hollow": Hollow,
     "rings": Rings,
