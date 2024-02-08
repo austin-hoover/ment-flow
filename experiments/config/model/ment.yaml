@@ -5,12 +5,13 @@ interp: "linear"
 
 mode: "integrate"
 
-integration_xmax: 3.5
-integration_res: 300
+int_xmax: 3.5
+int_res: 300
 
-sampler: "grid"
-sampler_xmax: null
-sampler_res: 200
-sampler_noise: 0.0
+samp: "grid"
+samp_xmax: null
+samp_res: 200
+samp_noise: 0.0
+samp_store: true
 
 verbose: false

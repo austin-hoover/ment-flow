@@ -7,7 +7,7 @@ def coords_from_edges(edges):
     return 0.5 * (edges[:-1] + edges[1:])
 
 
-def get_grid_points(*coords):
+def get_grid_points_numpy(*coords):
     """Return list of grid coordinates from coordinate arrays along each axis.
 
     Parameters
@@ -24,5 +24,5 @@ def get_grid_points(*coords):
     return np.vstack([C.ravel() for C in np.meshgrid(*coords, indexing="ij")]).T
 
 
-def get_grid_points_torch(*coords):
+def get_grid_points(*coords):
     return torch.vstack([C.ravel() for C in torch.meshgrid(*coords, indexing="ij")]).T

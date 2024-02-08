@@ -194,29 +194,34 @@ def setup_ment_model(
         prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale), device=cfg.device)
 
     sampler = None
-    if cfg.model.sampler == "grid":
-        grid_xmax = cfg.model.sampler_xmax
+    if cfg.model.samp == "grid":
+        grid_xmax = cfg.model.samp_xmax
         if grid_xmax is None:
             grid_xmax = cfg.eval.xmax
         grid_limits = d * [(-grid_xmax, grid_xmax)]
-        grid_res = cfg.model.sampler_res
+        grid_shape = tuple(d * [cfg.model.samp_res])
         sampler = mf.sample.GridSampler(
             limits=grid_limits, 
-            res=grid_res, 
+            shape=grid_shape, 
             device=cfg.device, 
-            noise=cfg.model.sampler_noise,
+            noise=cfg.model.samp_noise,
+            store=cfg.model.samp_store,
         )
 
-    # Get the measured dimension.
-    if measurements is None:
-        warnings.warn("No measurements provided. Assuming d_meas=1.")
-        d_meas = 1
-    else:
-        d_meas = list(unravel(measurements))[0].ndim
-    d_int = d - d_meas
-    integration_grid_limits = d_int * [(-cfg.model.integration_xmax, +cfg.model.integration_xmax)]
-    integration_grid_shape = tuple(d_int * [cfg.model.integration_res])
-    
+    integration_grid_limits = integration_grid_shape = None
+    if measurements is not None:
+        integration_grid_limits = []
+        integration_grid_shape = []
+        for index, transform in enumerate(transforms):
+            integration_grid_limits.append([])
+            integration_grid_shape.append([])
+            for diag_index, (diagnostic, measurement) in enumerate(zip(diagnostics[index], measurements[index])):
+                d_int = d - measurement.ndim
+                limits = d_int * [(-cfg.model.int_xmax, cfg.model.int_xmax)]
+                shape = tuple(d_int * [cfg.model.int_res])
+                integration_grid_limits[-1].append(limits)
+                integration_grid_shape[-1].append(shape)
+                
     model = mf.alg.ment.MENT(
         d=d,
         transforms=transforms,

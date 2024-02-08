@@ -102,10 +102,10 @@ def setup_plot(cfg: DictConfig) -> Callable:
             discrete=False, 
             limits=(cfg.d * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
             cmaps=[
-                pplt.Colormap("blues"),
-                pplt.Colormap("reds")
+                pplt.Colormap("div_r", left=0.5),
+                pplt.Colormap("div", left=0.5)
             ],
-            colors=["blue6", "red6"],
+            colors=["blue7", "red7"],
         ),
     ]
     plot = mf.train.plot.PlotModel(
