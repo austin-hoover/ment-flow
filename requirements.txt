@@ -6,7 +6,7 @@ pandas
 pot
 proplot
 psdist
-scipy
+scipy>=1.10
 scikit-image
 torch
 tqdm

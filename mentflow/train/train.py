@@ -78,6 +78,9 @@ class Trainer:
             plt.close("all")
 
     def eval_model(self, epoch: int, iteration: int):
+        if self.eval == False:
+            return {}
+            
         if self.output_dir is not None:
             path = self.get_filename("model", epoch, iteration, ext="pt")
             path = os.path.join(self.checkpoint_dir, path)

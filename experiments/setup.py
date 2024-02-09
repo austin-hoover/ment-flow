@@ -194,19 +194,33 @@ def setup_ment_model(
         prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale), device=cfg.device)
 
     sampler = None
-    if cfg.model.samp == "grid":
+    if cfg.model.samp in ["grid", "slicegrid"]:
         grid_xmax = cfg.model.samp_xmax
         if grid_xmax is None:
             grid_xmax = cfg.eval.xmax
         grid_limits = d * [(-grid_xmax, grid_xmax)]
         grid_shape = tuple(d * [cfg.model.samp_res])
-        sampler = mf.sample.GridSampler(
-            limits=grid_limits, 
-            shape=grid_shape, 
-            device=cfg.device, 
-            noise=cfg.model.samp_noise,
-            store=cfg.model.samp_store,
-        )
+
+        if cfg.model.samp == "grid":
+            sampler = mf.sample.GridSampler(
+                grid_limits=grid_limits,
+                grid_shape=grid_shape,
+                device=cfg.device, 
+                noise=cfg.model.samp_noise,
+                store=cfg.model.samp_store,
+            )
+        elif cfg.model.samp == "slicegrid":
+            sampler = mf.sample.SliceGridSampler(
+                grid_limits=grid_limits,
+                grid_shape=grid_shape,
+                proj_dim=2,
+                noise=cfg.model.samp_noise,
+                int_size=(5 ** d),
+                int_method="grid",
+                int_batches=1,
+                verbose=cfg.model.verbose,
+            )
+
 
     integration_grid_limits = integration_grid_shape = None
     if measurements is not None:

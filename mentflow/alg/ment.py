@@ -25,60 +25,6 @@ from mentflow.utils import grab
 from mentflow.utils import unravel
 
 
-def interpolate_1d(
-    points: torch.Tensor,
-    values: torch.Tensor,
-    int_points: torch.Tensor,
-    method="linear",
-) -> torch.Tensor:
-    """Interpolate one-dimensional data."""
-    points = grab(points)
-    values = grab(values)
-    int_points = grab(int_points)
-    int_values = np.zeros(int_points.shape[0])
-    if method == "nearest":
-        fint = scipy.interpolate.interp1d(
-            points, values, kind="nearest", bounds_error=False, fill_value=0.0
-        )
-        int_values = fint(int_points)
-    elif method == "linear":
-        fint = scipy.interpolate.interp1d(
-            points, values, kind="linear", bounds_error=False, fill_value=0.0
-        )
-        int_values = fint(int_points)
-    elif method == "pchip":
-        interpolator = scipy.interpolate.PchipInterpolator(points, values, extrapolate=True)
-        int_values = interpolator(int_points)
-    else:
-        raise ValueError("Invalid `interpolate` method.")
-    int_values = torch.from_numpy(int_values)
-    return int_values
-
-
-def interpolate_dd(
-    points: torch.Tensor,
-    values: torch.Tensor,
-    int_points: torch.Tensor,
-    method="linear",
-) -> torch.Tensor:
-    """Interpolate d-dimensional data."""
-    if points.ndim == 1:
-        return interpolate_1d(points, values, int_points, method=method)
-
-    points = grab(points)
-    values = grab(values)
-    int_points = grab(int_points)
-    int_values = scipy.interpolate.griddata(
-        points,
-        values,
-        int_points,
-        method=method,
-        fill_value=0.0,
-    )
-    int_values = torch.from_numpy(int_values)
-    return int_values
-
-
 class GaussianPrior:
     """Gaussian prior distribution."""
     def __init__(self, d=2, scale=1.0, device=None):
@@ -124,6 +70,45 @@ class UniformPrior:
         _log_prob = _log_prob.to(self.device)
         return _log_prob
 
+
+class LagrangeFunction:
+    """Represents an interpolated function evaluated on a regular grid."""
+    def __init__(self, coords: List[torch.Tensor], values: torch.Tensor) -> None:
+        """Constructor."""
+        self.coords = coords
+        self.values = values
+        self.interpolator = None
+        self.shape = None
+        self.set_values(values)
+
+    def set_values(self, values: torch.Tensor) -> None:
+        """Set grid values and create new interpolator."""
+        self.values = values
+        self.shape = values.shape
+        self.ndim = values.ndim
+
+        _values = grab(values)
+        if self.ndim == 1:
+            _coords = [grab(self.coords)]
+        else:
+            _coords = [grab(c) for c in self.coords]
+                    
+        self.interpolator = scipy.interpolate.RegularGridInterpolator(
+            _coords,
+            _values,
+            method="linear",
+            bounds_error=False, 
+            fill_value=0.0,
+        )
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """Interpolate function at points x."""
+        if self.interpolator is None:
+            self.set_values(self.values)
+        int_values = self.interpolator(x)
+        int_values = torch.from_numpy(int_values)
+        return int_values
+    
 
 class MENT:
     """MENT reconstruction model.
@@ -246,6 +231,25 @@ class MENT:
                 self.d_int.append([self.d - meas.ndim for meas in self.measurements[index]])
         return self.measurements
 
+    def initialize_lagrange_functions(self) -> List[List[torch.Tensor]]:
+        """Initialize the model to the prior distribution and set multipliers to
+        zero where the measurement is zero."""
+        self.lagrange_functions = []
+        for index in range(len(self.measurements)):
+            self.lagrange_functions.append([])
+            for measurement, diagnostic in zip(self.measurements[index], self.diagnostics[index]):
+                values = measurement > 0.0
+                values = values.float()
+                
+                if measurement.ndim == 1:
+                    coords = coords_from_edges(diagnostic.bin_edges)
+                else:
+                    coords = [coords_from_edges(e) for e in diagnostic.bin_edges]
+
+                lagrange_function = LagrangeFunction(coords, values)
+                self.lagrange_functions[-1].append(lagrange_function)
+        return self.lagrange_functions
+
     def normalize_projection(self, projection: torch.Tensor, index: int, diag_index: int) -> torch.Tensor:
         """Normalize the projection."""
         diagnostic = self.diagnostics[index][diag_index]
@@ -255,16 +259,6 @@ class MENT:
         else:
             bin_volume = math.prod((e[1] - e[0]) for e in diagnostic.bin_edges)
         return projection / projection.sum() / bin_volume
-
-    def initialize_lagrange_functions(self) -> List[List[torch.Tensor]]:
-        """Initialize the model to the prior distribution and set multipliers to
-        zero where the measurement is zero."""
-        self.lagrange_functions = []
-        for index in range(len(self.measurements)):
-            self.lagrange_functions.append([])
-            for measurement in self.measurements[index]:
-                self.lagrange_functions[-1].append((measurement > 0.0).float())
-        return self.lagrange_functions
 
     def get_meas_points(self, index: int, diag_index: int) -> torch.Tensor:
         """Return measurement grid points."""
@@ -309,12 +303,9 @@ class MENT:
 
     def evaluate_lagrange_function(self, u: torch.Tensor, index: int, diag_index: int) -> torch.Tensor:
         """Evaluate lagrange function at transformed coordinates u."""
-        points = self.get_meas_points(index, diag_index)
-        values = self.lagrange_functions[index][diag_index].ravel()
-        values = self.send(values)
         axis = self.diagnostics[index][diag_index].axis
-        int_points = u[:, axis]
-        int_values = interpolate_dd(points, values, int_points, method=self.interpolate)
+        lagrange_function = self.lagrange_functions[index][diag_index]
+        int_values = lagrange_function(u[:, axis])
         int_values = torch.clamp(int_values, 0.0, None)
         int_values = self.send(int_values)
         return int_values
@@ -385,7 +376,6 @@ class MENT:
                 u[:, axis] = int_points[:, k]
 
         # Compute integral.
-        # [To do: use monte carlo to compute integral in batches.]
         prediction = torch.zeros(meas_points.shape[0])
         for i, meas_point in enumerate(meas_points):
             # Update the coordinates in the measurement plane.
@@ -448,11 +438,12 @@ class MENT:
                 lagrange_function = self.lagrange_functions[index][diag_index]
 
                 shape = lagrange_function.shape
-                lagrange_function = lagrange_function.ravel()
+                lagrange_function.values = lagrange_function.values.ravel()
                 for k, (g_meas, g_pred) in enumerate(zip(measurement.ravel(), prediction.ravel())):
                     if (g_meas != 0.0) and (g_pred != 0.0):
-                        lagrange_function[k] *= 1.0 + omega * ((g_meas / g_pred) - 1.0)
-                lagrange_function = lagrange_function.reshape(shape)
+                        lagrange_function.values[k] *= 1.0 + omega * ((g_meas / g_pred) - 1.0)
+                lagrange_function.values = lagrange_function.values.reshape(shape)
+                lagrange_function.set_values(lagrange_function.values)
                 self.lagrange_functions[index][diag_index] = lagrange_function
         self.epoch += 1
 
