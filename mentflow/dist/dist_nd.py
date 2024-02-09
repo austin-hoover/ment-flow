@@ -15,18 +15,22 @@ class Gaussian(Distribution):
 
 
 class GaussianMixture(Distribution):
-    def __init__(self, modes=7, xmax=3.0, scale=0.75, **kws):
+    def __init__(self, modes=7, xmax=3.0, scale=0.75, shiftscale=True, **kws):
         super().__init__(**kws)
-
         self.modes = modes
         self.locs = self.rng.uniform(-xmax, xmax, size=(self.modes, self.d))
-        self.scales = np.ones(self.modes)
+        self.scales = scale * np.ones(self.modes)
+        self.shiftscale = shiftscale
 
-    def prob(self, x: np.ndarray) -> np.ndarray:
+    def _prob(self, x: np.ndarray) -> np.ndarray:
+        # Does not account for normalization that can occur in `_sample`.
         prob = np.zeros(x.shape[0])
         for scale, loc in zip(self.scales, self.locs):
             prob += np.exp(-0.5 * np.sum(((x - loc) / scale)**2, axis=1))
         return prob / self.modes
+
+    def _log_prob(self, x: np.ndarray) -> np.ndarray:
+        return np.log(self._prob(x))
 
     def _sample(self, n: int) -> np.ndarray:
         x = [
@@ -34,8 +38,10 @@ class GaussianMixture(Distribution):
             for scale, loc in zip(self.scales, self.locs)
         ]
         x = np.vstack(x)
-        x = x - np.mean(x, axis=0)
-        x = x / np.std(x, axis=0)
+        if self.shiftscale:
+            # This will be inconsistent with _prob method.
+            x = x - np.mean(x, axis=0)
+            x = x / np.std(x, axis=0)
         return x
         
 

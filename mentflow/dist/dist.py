@@ -48,7 +48,7 @@ class Distribution:
         return x
         
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
-        log_prob = self._log_prob(x)
+        log_prob = self._log_prob(x.detach().cpu().numpy())
         log_prob = torch.from_numpy(log_prob)
         log_prob = log_prob.type(torch.float32)
         return log_prob
