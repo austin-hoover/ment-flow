@@ -305,7 +305,7 @@ class MENT:
         """Evaluate lagrange function at transformed coordinates u."""
         axis = self.diagnostics[index][diag_index].axis
         lagrange_function = self.lagrange_functions[index][diag_index]
-        int_values = lagrange_function(u[:, axis])
+        int_values = lagrange_function(grab(u[:, axis]))
         int_values = torch.clamp(int_values, 0.0, None)
         int_values = self.send(int_values)
         return int_values
@@ -510,4 +510,7 @@ class MENT:
             self.sampler = self.sampler.to(device)
         if self.prior is not None:
             self.prior = self.prior.to(device)
+        for i in range(len(self.lagrange_functions)):
+            for j in range(len(self.lagrange_functions[i])):
+                self.lagrange_functions[i][j].values = self.send(self.lagrange_functions[i][j].values)
         return self

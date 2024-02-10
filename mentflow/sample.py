@@ -15,8 +15,8 @@ def tqdm_wrapper(iterable, verbose=False):
     return tqdm(iterable) if verbose else iterable
 
 
-def random_uniform(lb: float, ub: float, size: int) -> torch.Tensor:
-    return lb + (ub - lb) * torch.rand(size)
+def random_uniform(lb: float, ub: float, size: int, device=None) -> torch.Tensor:
+    return lb + (ub - lb) * torch.rand(size, device=device)
 
 
 def random_choice(items: torch.tensor, n: int, pdf: torch.Tensor):
@@ -38,6 +38,7 @@ def sample_hist(
     bin_edges: List[torch.Tensor] = None,
     n: int = 1,
     noise: float = 0.0,
+    device=None,
 ):
     d = hist.ndim
 
@@ -49,14 +50,14 @@ def sample_hist(
 
     idx = sample_hist_bins(hist, n)
 
-    x = torch.zeros(n, d)
+    x = torch.zeros(n, d, device=device)
     for axis in range(d):
         lb = bin_edges[axis][idx[axis]]
         ub = bin_edges[axis][idx[axis] + 1]
-        x[:, axis] = random_uniform(lb, ub, n)
+        x[:, axis] = random_uniform(lb, ub, n, device=device)
         if noise:
             delta = ub - lb
-            x[:, axis] += noise * delta * (torch.rand(n) - 0.5)
+            x[:, axis] += noise * delta * (torch.rand(n, device=device) - 0.5)
     x = torch.squeeze(x)
     return x
 
@@ -119,10 +120,11 @@ class GridSampler:
 
     def __call__(self, log_prob_func: Callable, n: int) -> torch.Tensor:
         grid_points = self.get_grid_points()
+        grid_points = self.send(grid_points)
         log_prob = log_prob_func(grid_points)
         prob = torch.exp(log_prob)
         prob = torch.reshape(prob, self.grid_shape)
-        x = sample_hist(prob, bin_edges=self.grid_edges, n=n, noise=self.noise)
+        x = sample_hist(prob, bin_edges=self.grid_edges, n=n, noise=self.noise, device=self.device)
         x = self.send(x)
         return x
 
@@ -219,7 +221,7 @@ class SliceGridSampler:
                 x[:, self.int_axis] = int_points[: x.shape[0], :]
             elif self.int_method == "uniform":
                 for axis, (xmin, xmax) in zip(self.int_axis, self.int_limits):
-                    x[:, axis] = random_uniform(xmin, xmax, self.int_size)
+                    x[:, axis] = random_uniform(xmin, xmax, self.int_size, device=self.device)
             elif self.int_method == "gaussian":
                 scale = [xmax for (xmin, xmax) in self.int_limits]
                 for axis, (xmin, xmax) in zip(self.int_axis, self.int_limits):
@@ -243,6 +245,7 @@ class SliceGridSampler:
             print("Projecting")
 
         proj = self.project(lambda x: torch.exp(log_prob_func(x)))
+        proj = self.send(proj)
         proj = proj / torch.sum(proj)
 
         # Resample projection. This determines the number of particles to place in each cell.
@@ -261,17 +264,16 @@ class SliceGridSampler:
             # Sample the projection coordinates from a uniform distribution over
             # the current cell in the projected space.
             y = torch.zeros((size, self.dim))
+            y = self.send(y)
             for axis, index in enumerate(indices):
                 y[:, axis] = random_uniform(
                     self.proj_grid_edges[axis][index],
                     self.proj_grid_edges[axis][index + 1],
                     size=size,
+                    device=self.device,
                 )
                 if self.noise:
-                    delta = (
-                        self.proj_grid_edges[axis][index + 1]
-                        - self.proj_grid_edges[axis][index]
-                    )
+                    delta = self.proj_grid_edges[axis][index + 1] - self.proj_grid_edges[axis][index]
                     y[:, axis] += self.noise * delta * (torch.rand(size) - 0.5)
 
             # Set the evaluation points on the projection axis.

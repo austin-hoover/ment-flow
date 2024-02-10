@@ -1,8 +1,5 @@
 #!/bin/sh
 
-# This script runs all toy problems in a loop, varying the number of projections.
-
-# model_list=("flow" "ment" "nn");
 model_list=("ment" "nn", "nn_cov", "flow");
 dist_list=("rings" "two-spirals" "swissroll" "galaxy" "hollow" "eight-gaussians");
 meas_num_list=(1 2 3 4 5 6 7);
@@ -20,7 +17,7 @@ for model in ${model_list[@]}; do
             elif [ "$model" == "nn" ]; then
                 python train_nn.py   dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size train.dmax=0.00025
             elif [ "$model" == "nn_cov" ]; then
-                python train_nn.py   dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size train.dmax=0.00025 train.penalty=100.0 train.penalty_scale=1.0 train.penalty_step=0.0 model.entest=cov
+                python train_nn.py   dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size train.dmax=0.00025 train.penalty=100.0 model.entest=cov
             elif [ "$model" == "flow" ]; then
                 python train_flow.py dist.name=$dist meas.num=$meas_num device=mps seed=$seed train.batch_size=$batch_size train.dmax=0.00025
             else

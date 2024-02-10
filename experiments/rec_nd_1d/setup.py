@@ -35,7 +35,16 @@ def make_transforms(cfg: DictConfig):
     
     transforms = []
     for direction in directions:
-        transform = mf.sim.ProjectionTransform(direction)
+        
+        # transform = mf.sim.ProjectionTransform(direction)
+
+        ## Use matrix so transformation is invertible.
+        M = torch.eye(cfg.d)
+        M[0, :] = direction
+        M = M.float().to(device)
+        transform = mf.sim.LinearTransform(M)
+        
+        transform = transform.to(cfg.device)
         transforms.append(transform)
     return transforms
 
