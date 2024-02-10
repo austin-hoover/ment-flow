@@ -4,14 +4,14 @@ defaults:
     - model: ment
     - train: ment
     - _self_
-
+    
+d: 4
 meas:
     num: 50
     optics: isotropic
-
 model:
     mode: sample
-    samp_res: 45
-    samp_noise: 0.0
-
-d: 4
+    samp:
+        res: 45
+        noise: 0.5
+    

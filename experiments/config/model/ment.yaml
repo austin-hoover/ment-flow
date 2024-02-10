@@ -1,17 +1,13 @@
-disc: "kld"
-prior: "gaussian"
+disc: kld
+prior: gaussian
 prior_scale: 1.0
-interp: "linear"
-
-mode: "integrate"
-
-int_xmax: 3.5
-int_res: 300
-
-samp: "grid"
-samp_xmax: null
-samp_res: 200
-samp_noise: 0.0
-samp_store: true
-
+interp: linear
+mode: integrate
+int:
+    method: grid
+    res: 250
+samp:
+    method: grid
+    res: 250
+    noise: 0.0
 verbose: false

@@ -98,14 +98,16 @@ def setup_plot(cfg: DictConfig) -> Callable:
             lw=1.5,
         ),
         mf.train.plot.PlotDistCorner(
-            bins=64,
+            bins=85,
             discrete=False, 
             limits=(cfg.d * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
             cmaps=[
-                pplt.Colormap("div_r", left=0.5),
-                pplt.Colormap("div", left=0.5)
+                pplt.Colormap("mono", right=0.99),
+                pplt.Colormap("mono", right=0.99)
             ],
-            colors=["blue7", "red7"],
+            colors=["black", "black"],
+            mask=True,
+            diag_kws=dict(kind="line", lw=1.30),
         ),
     ]
     plot = mf.train.plot.PlotModel(

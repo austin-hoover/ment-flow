@@ -33,17 +33,22 @@ def sample_hist_bins(hist: torch.Tensor, n: int) -> torch.Tensor:
     return idx
 
 
-def sample_hist(hist: torch.Tensor, bin_edges: List[torch.Tensor] = None, n: int = 1, noise: float = 0.0):
+def sample_hist(
+    hist: torch.Tensor,
+    bin_edges: List[torch.Tensor] = None,
+    n: int = 1,
+    noise: float = 0.0,
+):
     d = hist.ndim
 
     if bin_edges is None:
         bin_edges = [torch.arange(hist.shape[axis] + 1) for axis in range(d)]
-    
+
     if d == 1 and len(bin_edges) > 1:
         bin_edges = [bin_edges]
 
     idx = sample_hist_bins(hist, n)
-    
+
     x = torch.zeros(n, d)
     for axis in range(d):
         lb = bin_edges[axis][idx[axis]]
@@ -73,12 +78,12 @@ def resample_hist(hist, n):
 
 class GridSampler:
     def __init__(
-        self, 
+        self,
         grid_limits: List[Tuple[float]],
         grid_shape: Tuple[int],
         noise: float = 0.0,
         device=None,
-        store=True
+        store=True,
     ):
         self.device = device
         self.grid_shape = grid_shape
@@ -130,16 +135,16 @@ class GridSampler:
 
 class SliceGridSampler:
     def __init__(
-        self, 
+        self,
         grid_limits: List[Tuple[float]],
         grid_shape: Tuple[int],
         proj_dim: int = 2,
         int_size: int = 10000,
-        int_method: str = "grid", 
+        int_method: str = "grid",
         int_batches: int = 1,
         noise: float = 0.0,
-        verbose: bool = False, 
-        device=None, 
+        verbose: bool = False,
+        device=None,
     ):
         self.device = device
         self.grid_shape = grid_shape
@@ -149,7 +154,7 @@ class SliceGridSampler:
         self.samp_dim = self.dim - self.proj_dim
         self.noise = noise
         self.verbose = verbose
-        
+
         self.grid_edges = [
             torch.linspace(
                 self.grid_limits[axis][0],
@@ -162,23 +167,23 @@ class SliceGridSampler:
 
         # Projection grid.
         self.proj_axis = tuple(range(self.proj_dim))
-        self.proj_grid_shape = self.grid_shape[:self.proj_dim]
-        self.proj_grid_edges = self.grid_edges[:self.proj_dim]
-        self.proj_grid_coords = self.grid_coords[:self.proj_dim]
+        self.proj_grid_shape = self.grid_shape[: self.proj_dim]
+        self.proj_grid_edges = self.grid_edges[: self.proj_dim]
+        self.proj_grid_coords = self.grid_coords[: self.proj_dim]
         self.proj_grid_points = get_grid_points(*self.proj_grid_coords)
 
         # Sampling grid.
         self.samp_axis = tuple(range(self.proj_dim, self.dim))
-        self.samp_grid_shape = self.grid_shape[self.proj_dim:]
-        self.samp_grid_edges = self.grid_edges[self.proj_dim:]
-        self.samp_grid_coords = self.grid_coords[self.proj_dim:]
+        self.samp_grid_shape = self.grid_shape[self.proj_dim :]
+        self.samp_grid_edges = self.grid_edges[self.proj_dim :]
+        self.samp_grid_coords = self.grid_coords[self.proj_dim :]
         self.samp_grid_points = get_grid_points(*self.samp_grid_coords)
 
         # Integration limits (integration axis = sampling axis).
         self.int_size = int_size
         self.int_method = int_method
         self.int_batches = int_batches
-        self.int_limits = self.grid_limits[self.proj_dim:]
+        self.int_limits = self.grid_limits[self.proj_dim :]
         self.int_axis = self.samp_axis
         self.int_dim = self.samp_dim
 
@@ -196,9 +201,9 @@ class SliceGridSampler:
     def send(self, x):
         return x.type(torch.float32).to(self.device)
 
-    def project(self, func: Callable) -> torch.Tensor:     
+    def project(self, func: Callable) -> torch.Tensor:
         """Project function onto onto lower dimensional plane."""
-        
+
         x = torch.zeros((self.int_size, self.dim))
 
         def set_int_points(x):
@@ -206,9 +211,12 @@ class SliceGridSampler:
                 int_res = self.int_size ** (1.0 / self.int_dim)
                 int_res = math.ceil(int_res)
                 int_res = int(int_res)
-                int_coords = [torch.linspace(xmin, xmax, int_res) for (xmin, xmax) in self.int_limits]
+                int_coords = [
+                    torch.linspace(xmin, xmax, int_res)
+                    for (xmin, xmax) in self.int_limits
+                ]
                 int_points = get_grid_points(*int_coords)
-                x[:, self.int_axis] = int_points[:x.shape[0], :]
+                x[:, self.int_axis] = int_points[: x.shape[0], :]
             elif self.int_method == "uniform":
                 for axis, (xmin, xmax) in zip(self.int_axis, self.int_limits):
                     x[:, axis] = random_uniform(xmin, xmax, self.int_size)
@@ -226,20 +234,20 @@ class SliceGridSampler:
             for i in tqdm_wrapper(range(rho.shape[0]), self.verbose):
                 x[:, self.proj_axis] = self.proj_grid_points[i, :]
                 rho[i] += torch.sum(func(x))
-        rho = torch.reshape(rho, self.proj_grid_shape)        
+        rho = torch.reshape(rho, self.proj_grid_shape)
         return rho
 
     def __call__(self, log_prob_func: Callable, n: int) -> torch.Tensor:
         # Compute projection.
         if self.verbose:
             print("Projecting")
-            
+
         proj = self.project(lambda x: torch.exp(log_prob_func(x)))
         proj = proj / torch.sum(proj)
 
         # Resample projection. This determines the number of particles to place in each cell.
         n_samples_per_cell = resample_hist(proj, n)
-          
+
         # Sample within each slice of the projection axis.
         if self.verbose:
             print("Sampling")
@@ -249,7 +257,7 @@ class SliceGridSampler:
             size = int(n_samples_per_cell[indices])
             if size == 0:
                 continue
-        
+
             # Sample the projection coordinates from a uniform distribution over
             # the current cell in the projected space.
             y = torch.zeros((size, self.dim))
@@ -260,9 +268,12 @@ class SliceGridSampler:
                     size=size,
                 )
                 if self.noise:
-                    delta = self.proj_grid_edges[axis][index + 1] - self.proj_grid_edges[axis][index]
+                    delta = (
+                        self.proj_grid_edges[axis][index + 1]
+                        - self.proj_grid_edges[axis][index]
+                    )
                     y[:, axis] += self.noise * delta * (torch.rand(size) - 0.5)
-            
+
             # Set the evaluation points on the projection axis.
             for axis, index in enumerate(indices):
                 self.eval_points[:, axis] = self.proj_grid_coords[axis][index]
@@ -270,11 +281,12 @@ class SliceGridSampler:
             # Grid sample.
             prob = torch.exp(log_prob_func(self.eval_points))
             prob = torch.reshape(prob, self.samp_grid_shape)
-            y[:, self.samp_axis] = sample_hist(prob, self.samp_grid_edges, n=size, noise=self.noise)
+            y[:, self.samp_axis] = sample_hist(
+                prob, self.samp_grid_edges, n=size, noise=self.noise
+            )
 
             x.append(y)
-        
+
         x = torch.vstack(x)
         x = x[torch.randperm(x.shape[0])]
         return x
-

@@ -149,7 +149,7 @@ class MENT:
 
     Attributes
     ----------
-    lagrange_functions : list[tensor]
+    lagrange_functions : list[LagrangeFunction]
         Lagrange functions ("h functions", "component functions") evaluated on the
         measurement grids. We treat them as continuous functions by interpolating
         between grid points.

@@ -186,43 +186,32 @@ def setup_ment_model(
 ):
     """Setup MENT model from config."""
     d = cfg.d
-    
+
+    # Prior
     prior = None
     if cfg.model.prior == "gaussian":
         prior = mf.alg.ment.GaussianPrior(d=d, scale=cfg.model.prior_scale, device=cfg.device)
     if cfg.model.prior == "uniform":
         prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale), device=cfg.device)
 
+    # Sampling
     sampler = None
-    if cfg.model.samp in ["grid", "slicegrid"]:
-        grid_xmax = cfg.model.samp_xmax
-        if grid_xmax is None:
-            grid_xmax = cfg.eval.xmax
-        grid_limits = d * [(-grid_xmax, grid_xmax)]
-        grid_shape = tuple(d * [cfg.model.samp_res])
+    kws = OmegaConf.to_container(cfg.model.samp)
+    kws["device"] = cfg.device
+    method = kws.pop("method", "grid")
+    if method in ["grid", "slicegrid"]:
+        grid_xmax = kws.pop("xmax", cfg.eval.xmax)            
+        grid_res = kws.pop("res", 45)
+        kws["grid_limits"] = d * [(-grid_xmax, grid_xmax)]
+        kws["grid_shape"] = tuple(d * [grid_res])
+        if method == "grid":
+            sampler = mf.sample.GridSampler(**kws)
+        elif method == "slicegrid":
+            sampler = mf.sample.SliceGridSampler(**kws)
 
-        if cfg.model.samp == "grid":
-            sampler = mf.sample.GridSampler(
-                grid_limits=grid_limits,
-                grid_shape=grid_shape,
-                device=cfg.device, 
-                noise=cfg.model.samp_noise,
-                store=cfg.model.samp_store,
-            )
-        elif cfg.model.samp == "slicegrid":
-            sampler = mf.sample.SliceGridSampler(
-                grid_limits=grid_limits,
-                grid_shape=grid_shape,
-                proj_dim=2,
-                noise=cfg.model.samp_noise,
-                int_size=(5 ** d),
-                int_method="grid",
-                int_batches=1,
-                verbose=cfg.model.verbose,
-            )
-
-
-    integration_grid_limits = integration_grid_shape = None
+    # Integration
+    integration_grid_limits = None
+    integration_grid_shape = None
     if measurements is not None:
         integration_grid_limits = []
         integration_grid_shape = []
@@ -231,10 +220,13 @@ def setup_ment_model(
             integration_grid_shape.append([])
             for diag_index, (diagnostic, measurement) in enumerate(zip(diagnostics[index], measurements[index])):
                 d_int = d - measurement.ndim
-                limits = d_int * [(-cfg.model.int_xmax, cfg.model.int_xmax)]
-                shape = tuple(d_int * [cfg.model.int_res])
-                integration_grid_limits[-1].append(limits)
-                integration_grid_shape[-1].append(shape)
+                grid_xmax = cfg.eval.xmax
+                if "xmax" in cfg.model.int:
+                    grid_xmax = cfg.model.int["xmax"]
+                grid_limits = d_int * [(-grid_xmax, grid_xmax)]
+                grid_shape = tuple(d_int * [cfg.model.int.res])
+                integration_grid_limits[-1].append(grid_limits)
+                integration_grid_shape[-1].append(grid_shape)
                 
     model = mf.alg.ment.MENT(
         d=d,
