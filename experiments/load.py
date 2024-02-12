@@ -15,6 +15,7 @@ from omegaconf import OmegaConf
 
 import mentflow as mf
 from .setup import setup_mentflow_model
+from .setup import setup_ment_model
 
 
 def load_pickle_safe(path):
@@ -31,35 +32,28 @@ def epoch_and_iteration_number(checkpoint_filename):
     return epoch, iteration
 
 
-def setup_ment_model(cfg: DictConfig, device=None) -> mf.MENTFlow:
-    """Setup empty MENT model."""
-    model = mf.alg.MENT(
-        d=cfg.d,
-        transforms=[],
-        diagnostics=[],
-        measurements=[],
-        device=device,
-    )
-    return model
+# def setup_ment_model(cfg: DictConfig, device=None) -> mf.MENTFlow:
+#     """Setup empty MENT model."""
+#     model = mf.alg.MENT(
+#         d=cfg.d,
+#         transforms=[],
+#         diagnostics=[],
+#         measurements=[],
+#         device=device,
+#     )
+#     return model
 
 
 def load_mentflow_model(cfg: dict, checkpoint_path: str, device=None) -> mf.MENTFlow:
     """Load MENT-Flow model architecture (from cfg) and parameters (from checkpoint_path)."""
-    model = setup_mentflow_model(cfg, transforms=None, diagnostics=None, measurements=None)
-    model.load(checkpoint_path, device)
-
-    ## temp
-    if type(model.gen) is mf.gen.NNGen:
-        loc = torch.zeros((cfg.d,), device=device)
-        cov = torch.eye(cfg.d, device=device)
-        model.gen.base = torch.distributions.MultivariateNormal(loc, cov)
-    
+    model = setup_mentflow_model(cfg, transforms=[], diagnostics=[], measurements=[], device=device)
+    model.load(checkpoint_path, device)    
     return model
 
 
 def load_ment_model(cfg: dict, checkpoint_path: str, device=None) -> mf.alg.MENT:
     """Load MENT model (from cfg) and parameters (from checkpoint_path)."""
-    model = setup_ment_model(cfg, device=device)
+    model = setup_ment_model(cfg, transforms=[], diagnostics=[], measurements=[], device=device)
     model.load(checkpoint_path, device=device)
     return model
 

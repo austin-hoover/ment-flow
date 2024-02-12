@@ -21,10 +21,14 @@ def setup_mentflow_model(
     transforms=None,
     diagnostics=None,
     measurements=None,
+    device=None,
 ):
     """Setup MENTFlow model from config."""
-    
-    send = lambda x: x.type(torch.float32).to(cfg.device)
+    if device is None:
+        device = cfg.device
+        
+    def send(x):
+        return x.type(torch.float32).to(device)
 
     # Build generative model.
     kws = OmegaConf.to_container(cfg.gen)
@@ -35,8 +39,16 @@ def setup_mentflow_model(
     if kws["name"] == "nsf":
         kws.setdefault("bins", 20)
     
-    gen = mf.gen.build_gen(device=cfg.device, **kws)
-    gen = gen.to(cfg.device)
+    gen = mf.gen.build_gen(device=device, **kws)
+    gen = gen.to(device)
+    
+    
+    ## Temp
+    if type(gen) is mf.gen.NNGen:
+        loc = torch.zeros((cfg.d,), device=device)
+        cov = torch.eye(cfg.d, device=device)
+        gen.base = torch.distributions.MultivariateNormal(loc, cov)
+    
 
     # Set Gaussian prior width.
     d = cfg.d
@@ -56,7 +68,7 @@ def setup_mentflow_model(
         penalty_parameter=0.0,
         discrepancy_function=cfg.model.disc,
     )
-    model = model.to(cfg.device)
+    model = model.to(device)
     return model
 
 
@@ -89,16 +101,16 @@ def train_mentflow_model(
     if setup_plot is not None:
         plot = setup_plot(cfg)
 
-    eval = None
+    _eval = None
     if setup_eval is not None:
-        eval = setup_eval(cfg)
+        _eval = setup_eval(cfg)
    
     trainer = mf.train.Trainer(
         model=model,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
         plot=plot,
-        eval=eval,
+        eval=_eval,
         output_dir=output_dir,
         notebook=notebook,
         load_best=cfg.train.load_best,
@@ -183,21 +195,24 @@ def setup_ment_model(
     transforms=None,
     diagnostics=None,
     measurements=None,
+    device=None,
 ):
     """Setup MENT model from config."""
     d = cfg.d
+    if device is None:
+        device = cfg.device
 
     # Prior
     prior = None
     if cfg.model.prior == "gaussian":
-        prior = mf.alg.ment.GaussianPrior(d=d, scale=cfg.model.prior_scale, device=cfg.device)
+        prior = mf.alg.ment.GaussianPrior(d=d, scale=cfg.model.prior_scale, device=device)
     if cfg.model.prior == "uniform":
-        prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale), device=cfg.device)
+        prior = mf.alg.ment.UniformPrior(d=d, scale=(10.0 * cfg.model.prior_scale), device=device)
 
     # Sampling
     sampler = None
     kws = OmegaConf.to_container(cfg.model.samp)
-    kws["device"] = cfg.device
+    kws["device"] = device
     method = kws.pop("method", "grid")
     if method in ["grid", "slicegrid"]:
         grid_xmax = kws.pop("xmax", cfg.eval.xmax)            
@@ -241,10 +256,10 @@ def setup_ment_model(
         integration_grid_limits=integration_grid_limits,
         integration_grid_shape=integration_grid_shape,
         n_samples=cfg.train.batch_size,
-        device=cfg.device,
+        device=device,
         verbose=cfg.model.verbose,
     )
-    model.to(cfg.device)
+    model.to(device)
     return model
 
 
@@ -264,13 +279,13 @@ def train_ment_model(
     if setup_plot is not None:
         plot = setup_plot(cfg)
         
-    eval = None
+    _eval = None
     if setup_eval is not None:
-        eval = setup_eval(cfg)
+        _eval = setup_eval(cfg)
    
     trainer = mf.train.MENTTrainer(
         model=model,
-        eval=eval,
+        eval=_eval,
         plot=plot,
         output_dir=output_dir,
         notebook=notebook,

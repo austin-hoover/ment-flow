@@ -108,16 +108,9 @@ def setup_plot(cfg: DictConfig) -> Callable:
             bins=85,
             discrete=False, 
             limits=(cfg.d * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
-            
-            # cmaps=[
-            #     pplt.Colormap("mono", right=0.95),
-            #     pplt.Colormap("mono", right=0.95),                
-            # ],
-            # colors=["black", "black"],
-
             cmaps=[
-                pplt.Colormap("mono", right=0.85),
-                pplt.Colormap("mono", right=0.85),
+                pplt.Colormap("mono", right=0.95),
+                pplt.Colormap("mono", right=0.95),
             ],
             colors=["black", "black"],
             
