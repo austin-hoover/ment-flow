@@ -89,27 +89,35 @@ class Hollow(Distribution):
 
 
 class Rings(Distribution):
-    def __init__(self, n_rings=2, decay=1.0, **kws):
+    def __init__(self, n_rings=2, decay=0.5, **kws):
         super().__init__(**kws)
         self.n_rings = n_rings
         self.decay = decay
         if self.noise is None:
             self.noise = 0.15
 
-    def _sample(self, n):
-        n_outer = n // self.n_rings
+    def _sample(self, n):        
+        ## Set sphere radii.
         radii = np.linspace(1.0, 0.0, self.n_rings, endpoint=False)[::-1]
+                
+        ## Set equal particle density on each sphere.
         sizes = np.array([sphere_surface_area(d=self.d, r=r) for r in radii])
-        sizes = sizes * np.linspace(1.0, self.decay * 1.0 / self.n_rings, self.n_rings)
+        
+        ## Make density vary linearly with the radius.
+        sizes = sizes * np.linspace(1.0, self.decay, self.n_rings)
+
+        ## Scale to correct total particle number.
         sizes = sizes * (n / np.sum(sizes))
         sizes = sizes.astype(int)
-
+        
+        ## Generate particles on each sphere.
         X = []
         dist = KV(d=self.d, rng=self.rng)
         for size, radius in zip(sizes, radii):
             X.append(radius * dist.sample(size))
         X = np.vstack(X)
         X = X / np.std(X, axis=0)
+        
         return X
         
 
