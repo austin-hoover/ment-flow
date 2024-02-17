@@ -132,8 +132,18 @@ class Leaf(Dist2D):
         self.edges = [np.linspace(-self.xmax, +self.xmax, s + 1) for s in self.hist.shape]
 
     def _sample(self, n):
-        X = sample_hist(self.hist, self.edges, n=n)
-        X = self._process(X)
+        hist = self.hist
+        edges = self.edges
+        
+        pdf = hist.ravel()
+        idx = np.flatnonzero(pdf)
+        pdf = pdf[idx]
+        pdf = pdf / np.sum(pdf)
+        idx = np.random.choice(idx, n, replace=True, p=pdf)
+        idx = np.unravel_index(idx, shape=hist.shape)
+        lb = [edges[axis][idx[axis]] for axis in range(hist.ndim)]
+        ub = [edges[axis][idx[axis] + 1] for axis in range(hist.ndim)]
+        X = np.random.uniform(lb, ub).T
         return X
 
 
