@@ -303,12 +303,14 @@ class MENT:
 
     def evaluate_lagrange_function(self, u: torch.Tensor, index: int, diag_index: int) -> torch.Tensor:
         """Evaluate lagrange function at transformed coordinates u."""
-        axis = self.diagnostics[index][diag_index].axis
+        diagnostic = self.diagnostics[index][diag_index]
         lagrange_function = self.lagrange_functions[index][diag_index]
-        int_values = lagrange_function(grab(u[:, axis]))
-        int_values = torch.clamp(int_values, 0.0, None)
-        int_values = self.send(int_values)
-        return int_values
+        u_proj = diagnostic.project(u)
+        u_proj = grab(u_proj)
+        values = lagrange_function(u_proj)
+        values = torch.clamp(values, 0.0, None)
+        values = self.send(values)
+        return values
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
         """Return the log probability density at points x."""
@@ -418,7 +420,7 @@ class MENT:
         _function = _functions[self.mode]
         return _function(index, diag_index, **kws)
 
-    def gauss_seidel_iterate(self, omega: float = 1.0, **kws) -> None:
+    def gauss_seidel_iterate(self, omega: float = 1.0, thresh: float = 1.0e-10, **kws) -> None:
         """Perform Gauss-Seidel iteration to update Lagrange functions.
 
         Parameters
@@ -426,6 +428,8 @@ class MENT:
         omega : float
             Learning rate in range [0.0, 1.0].
             h -> h * (1 + omega * ((g / g*) - 1))
+        thresh: float
+            Fractional threshold applied to simulated projections (g*).
         **kws
             Key word arguments passed to `self._simulate`.
         """
@@ -433,16 +437,18 @@ class MENT:
             if self.verbose:
                 print(f"index={index}")
             for diag_index, diagnostic in enumerate(self.diagnostics[index]):
-                prediction = self._simulate(index, diag_index, **kws)
-                measurement = self.measurements[index][diag_index]
                 lagrange_function = self.lagrange_functions[index][diag_index]
-
+                measurement = self.measurements[index][diag_index]
+                
+                prediction = self._simulate(index, diag_index, **kws)
+                prediction[prediction < (torch.max(prediction) * thresh)] = 0.0
+                
                 shape = lagrange_function.shape
-                lagrange_function.values = lagrange_function.values.ravel()
-                for k, (g_meas, g_pred) in enumerate(zip(measurement.ravel(), prediction.ravel())):
+                lagrange_function.values = torch.ravel(lagrange_function.values)
+                for k, (g_meas, g_pred) in enumerate(zip(torch.ravel(measurement), torch.ravel(prediction))):
                     if (g_meas != 0.0) and (g_pred != 0.0):
                         lagrange_function.values[k] *= 1.0 + omega * ((g_meas / g_pred) - 1.0)
-                lagrange_function.values = lagrange_function.values.reshape(shape)
+                lagrange_function.values = torch.reshape(lagrange_function.values, shape)
                 lagrange_function.set_values(lagrange_function.values)
                 self.lagrange_functions[index][diag_index] = lagrange_function
         self.epoch += 1

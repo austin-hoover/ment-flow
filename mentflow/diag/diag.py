@@ -32,7 +32,7 @@ class Histogram(Diagnostic):
         self.noise = setting
         
     def _forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+        raise NotImplementedError        
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hist = self._forward(x)
@@ -95,6 +95,15 @@ class Histogram1D(Histogram):
         self.direction = direction
         if self.direction is not None:
             self.direction = self.direction / torch.norm(self.direction)
+            
+    def project(self, x: torch.Tensor) -> torch.Tensor:
+        """Project points onto measurement axis."""
+        x_proj = None
+        if self.direction is None:
+            x_proj = x[:, self.axis]
+        else:
+            x_proj = torch.sum(x * self.direction, dim=1)
+        return x_proj
 
     def _forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
@@ -109,16 +118,12 @@ class Histogram1D(Histogram):
         hist : tensor
             The estimated probability density.
         """
-        data = None
-        if self.direction is None:
-            data = x[:, self.axis]
-        else:
-            data = torch.sum(x * self.direction, dim=1)
+        x_proj = self.project(x)
         if self.kde:
-            hist = kde_histogram_1d(data, bin_edges=self.bin_edges, bandwidth=self.bandwidth)
+            hist = kde_histogram_1d(x_proj, bin_edges=self.bin_edges, bandwidth=self.bandwidth)
             return hist
         else:
-            hist = torch.histogram(data, bins=self.bin_edges, density=True)
+            hist = torch.histogram(x_proj, bins=self.bin_edges, density=True)
             hist = hist.hist
             return hist
 
@@ -167,7 +172,11 @@ class Histogram2D(Histogram):
             self.bandwidth  = d * [self.bandwidth]
         self.bandwidth = [self.bandwidth [i] * self.resolution[i] for i in range(d)]
         self.kde = kde
-
+        
+    def project(self, x: torch.Tensor) -> torch.Tensor:
+        """Project points onto measurement axis."""
+        return x[:, self.axis]
+        
     def _forward(self, x: torch.Tensor) -> torch.Tensor:
         """Estimate probability density. 
 
@@ -181,10 +190,11 @@ class Histogram2D(Histogram):
         hist : tensor
             The estimated probability density.
         """
+        x_proj = self.project(x)
         if self.kde:
             hist = kde_histogram_2d(
-                x[:, self.axis[0]],
-                x[:, self.axis[1]],
+                x_proj[:, 0],
+                x_proj[:, 1],
                 bin_edges=self.bin_edges,
                 bandwidth=self.bandwidth,
             )
@@ -201,7 +211,7 @@ class Histogram2D(Histogram):
             # hist = hist.hist
 
             hist, _ = np.histogramdd(
-                x[:, self.axis].detach().cpu().numpy(),
+                x_proj.detach().cpu().numpy(),
                 bins=[e.detach().cpu().numpy() for e in self.bin_edges],
                 density=True,
             )

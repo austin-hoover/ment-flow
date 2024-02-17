@@ -307,7 +307,8 @@ class MENTTrainer(Trainer):
     def train(
         self, 
         epochs: int, 
-        omega: float = 0.5, 
+        omega: float = 0.99, 
+        thresh: float = 1.00e-10,
         savefig_kws: Optional[dict] = None,
         dmax: float = 0.0,
     ) -> None:
@@ -348,4 +349,4 @@ class MENTTrainer(Trainer):
                     return
                 
             if epoch < epochs:
-                self.model.gauss_seidel_iterate(omega=omega)
+                self.model.gauss_seidel_iterate(omega=omega, thresh=thresh)
