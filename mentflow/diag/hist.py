@@ -1,6 +1,6 @@
 """Differentiable kernel density estimation (KDE).
 
-Code provided by R. Roussel (https://link.aps.org/doi/10.1103/PhysRevLett.130.145001).
+Code based on R. Roussel's implementation (https://link.aps.org/doi/10.1103/PhysRevLett.130.145001).
 """
 from typing import Iterable
 from typing import Tuple
@@ -76,12 +76,12 @@ def joint_pdf(
 
 def kde_histogram_1d(
     x: torch.Tensor, 
-    bin_edges: torch.Tensor, 
+    bins: torch.Tensor, 
     bandwidth: float = 1.0, 
     epsilon: float = 1.00e-10
 ) -> torch.Tensor:
     """Estimate one-dimensional histogram using kernel density estimation."""
-    coords = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    coords = 0.5 * (bins[:-1] + bins[1:])
     prob, _ = marginal_pdf(x.unsqueeze(-1), coords, bandwidth, epsilon)
     return prob
     
@@ -89,12 +89,12 @@ def kde_histogram_1d(
 def kde_histogram_2d(
     x: torch.Tensor,
     y: torch.Tensor,
-    bin_edges: Iterable[torch.Tensor],
+    bins: Iterable[torch.Tensor],
     bandwidth: Iterable[float] = (1.0, 1.0),
     epsilon: float = 1.00e-10,
 ) -> torch.Tensor:
     """Estimate two-dimensional histogram using kernel density estimation."""
-    coords = [0.5 * (e[:-1] + e[1:]) for e in bin_edges]
+    coords = [0.5 * (e[:-1] + e[1:]) for e in bins]
     _, kernel_values_x = marginal_pdf(x.unsqueeze(-1), coords[0], bandwidth[0], epsilon)
     _, kernel_values_y = marginal_pdf(y.unsqueeze(-1), coords[1], bandwidth[1], epsilon)
     prob = joint_pdf(kernel_values_x, kernel_values_y, coords, epsilon=epsilon)
