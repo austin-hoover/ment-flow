@@ -1,11 +1,10 @@
-"""Iterative maximum-entropy tomography (MENT) solvers.
+"""Iterative maximum-entropy tomography (MENT) solver.
 
 References
 ----------
 [1] https://doi.org/10.1109/78.80970
 [2] https://doi.org/10.1103/PhysRevAccelBeams.25.042801
 """
-
 import math
 from typing import Any
 from typing import Callable
@@ -17,7 +16,6 @@ import numpy as np
 import scipy.interpolate
 import torch
 
-from mentflow.loss import get_loss_function
 from mentflow.sim import forward
 from mentflow.utils import coords_from_edges
 from mentflow.utils import get_grid_points
@@ -25,70 +23,26 @@ from mentflow.utils import grab
 from mentflow.utils import unravel
 
 
-class GaussianPrior:
-    """Gaussian prior distribution."""
-    def __init__(self, d=2, scale=1.0, device=None):
-        self.d = d
-        self.scale = scale
-        self.device = device
-        self._initialize()
-
-    def _initialize(self):
-        loc = torch.zeros(self.d)
-        loc = loc.type(torch.float32).to(self.device)
-        
-        cov = torch.eye(self.d) * (self.scale**2)
-        cov = cov.type(torch.float32).to(self.device)
-
-        self._dist = torch.distributions.MultivariateNormal(loc, cov)
-
-    def to(self, device):
-        self.device = device
-        self._initialize()
-        return self
-
-    def log_prob(self, x):
-        return self._dist.log_prob(x)
-
-
-class UniformPrior:
-    """Uniform prior distribution."""
-    def __init__(self, d=2, scale=10.0, device=None):
-        self.scale = scale
-        self.d = d
-        self.volume = (100.0) ** self.d
-        self.device = device
-
-    def to(self, device):
-        self.device = device
-        return self
-
-    def log_prob(self, x):
-        _log_prob = np.log(1.0 / self.volume)
-        _log_prob = torch.ones(x.shape[0]) * _log_prob
-        _log_prob = _log_prob.type(torch.float32)
-        _log_prob = _log_prob.to(self.device)
-        return _log_prob
-
-
 class LagrangeFunction:
-    """Represents an interpolated function evaluated on a regular grid."""
-    def __init__(self, coords: List[torch.Tensor], values: torch.Tensor) -> None:
-        """Constructor."""
+    def __init__(self, coords: List[torch.Tensor], values: torch.Tensor, interpolation_kws: dict = None) -> None:
         self.coords = coords
         self.values = values
+        
         self.interpolator = None
-        self.shape = None
+        self.interpolation_kws = interpolator_kws
+        if self.interpolation_kws is None:
+            self.interpolation_kws = dict()
+        self.interpolation_kws.setdefault("method", "linear")
+        self.interpolation_kws.setdefault("bounds_error", False)
+        self.interpolation_kws.setdefault("fill_value", 0.0)
+        
         self.set_values(values)
 
     def set_values(self, values: torch.Tensor) -> None:
-        """Set grid values and create new interpolator."""
         self.values = values
-        self.shape = values.shape
-        self.ndim = values.ndim
 
         _values = grab(values)
-        if self.ndim == 1:
+        if _values.ndim == 1:
             _coords = [grab(self.coords)]
         else:
             _coords = [grab(c) for c in self.coords]
@@ -96,56 +50,15 @@ class LagrangeFunction:
         self.interpolator = scipy.interpolate.RegularGridInterpolator(
             _coords,
             _values,
-            method="linear",
-            bounds_error=False, 
-            fill_value=0.0,
+            **interpolation_kws
         )
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        """Interpolate function at points x."""
-        if self.interpolator is None:
-            self.set_values(self.values)
-        int_values = self.interpolator(x)
-        int_values = torch.from_numpy(int_values)
-        return int_values
+        return torch.from_numpy(self.interpolator(x))
     
 
 class MENT:
-    """MENT reconstruction model.
-
-    Parameters
-    ----------
-    d : int
-        Dimension of the reconstructed phase space.
-    transforms : list[callable]
-        `transforms[i](x)` maps the coordinates x to the ith measurement location.
-    diagnostics : list[list[callable]]
-        `diagnostics[i]` is a list of diagnostics to apply after the ith transformation.
-        - Must implement `diagnostic(x)`, producing measurement data.
-        - Must have the following parameters:
-            - `bin_edges`: tensor or list[tensor]; histogram bin edges
-            - `axis`: int or tuple[int]; the projection axis
-    measurements : list[list[tensor]]
-        `measurements[i]` is a list of measurements obtained after the ith transformation.
-        They should be normalized.
-    prior : object
-        Prior distribution implementing `prior.prob(x)`. Defaults to a uniform distribution.
-    interpolate : bool, str
-        Interpolation method used to evaluate lagrange functions.
-            - "nearest": nearest neighbor (scipy.interpolate.NearestNDInterpolator).
-            - "linear": linear interpolation (scipy.interpolate.LinearNDInterpolator).
-            - "pchip": 1D monotonic cubic splines (scipy.interpolate.PchipInterpolator).
-    mode: {"integrate", "sample"}
-        Whether to use numerical integration or sampling + particle tracking to
-        compute projections.
-    integration_grid_limits : list[list[list[tuple[float]]]] (optional)
-        The integration grid limits for each measurement.
-    integration_grid_shape : list[list[tuple[int]]] (optional)
-        The integration grid shape for each measurement.
-    sampler : callable (optional)
-        Implements `sample(prob, n)` method to sample points from pdf `prob`.
-    n_samples : int (optional)
-        The number of samples to draw if mode="sample".
+    """Iterative maximum-entropy tomography (MENT) solver.
 
     Attributes
     ----------
@@ -153,38 +66,77 @@ class MENT:
         Lagrange functions ("h functions", "component functions") evaluated on the
         measurement grids. We treat them as continuous functions by interpolating
         between grid points.
-    d_meas : list[list[int]]
-        Dimension of each measurement axis. (d_meas < d)
-    d_int : list[list[int]]
-        Dimension of each integration axis. (d_int = d - d_meas)
     epoch : int
         The current epoch (MENT iteration looping over all measurements).
+
+    References
+    ----------
+    [1] https://doi.org/10.1109/78.80970
+    [2] https://doi.org/10.1103/PhysRevAccelBeams.25.042801
     """
     def __init__(
         self,
-        d: int,
+        ndim: int,
         transforms: List[Callable],
         diagnostics: List[List[Callable]],
         measurements: List[List[torch.Tensor]],
-        discrepancy_function: str = "kld",
+        discrepancy_function: Callable,
         prior: Any = None,
-        interpolate: str = "linear",
+        interpolation: dict = None,
         mode: str = "integrate",
         integration_grid_limits: List[Tuple[float]] = None,
         integration_grid_shape: Tuple[int] = None,
         sampler: Optional[Callable] = None,
         n_samples: int = 1000000,
         device: Optional[torch.device] = None,
-        verbose=False,
+        verbose: bool = False,
     ) -> None:
-        """Constructor."""
+        """Constructor.
+        
+        Parameters
+        ----------
+        ndim : int
+            Dimension of reconstructed phase space.
+        transforms : list[nn.Module]
+            Mappings between reconstruction and measurement locations.
+        diagnostics : list[list[torch.nn.Module]
+            `diagnostics[i]` is a list of diagnostics applied after the ith transform.
+            - Must implement `diagnostic(x)`, producing measurement data.
+            - Must have the following parameters:
+                - `bin_edges`: tensor or list[tensor]; histogram bin edges
+                - `axis`: int or tuple[int]; the projection axis
+                - `ndim`: int; the projected dimension
+        measurements : list[list[tensor]
+            Measured data corresponding to each diagnostic.
+        discrepancy_function: Callable
+            Computes scalar difference between measurements and predictions.
+            Call signature: `discrepancy_function(pred: torch.Tensor, meas: torch.Tensor) -> torch.Tensor (float)`.
+        prior : Any
+            Prior distribution implementing `prior.prob(x: torch.Tensor) -> torch.Tensor`. 
+            Defaults to a uniform distribution with wide suppport ([-100, 100]).
+        interpolation_kws : dict
+            Key word arguments passed to scipy.interpolate.RegularGridInterpolator.
+        mode: {"integrate", "sample"}
+            Whether to use numerical integration or sampling + particle tracking to compute projections.
+        integration_grid_limits : list[list[ list[tuple[float] ]]] (optional)
+            The integration grid limits [(xmin, xmax), (ymin, ymax), ...] for each measurement.
+        integration_grid_shape : list[list[tuple[int]]] (optional)
+            The integration grid shape (n1, n2, ...) for each measurement.
+        sampler : callable (optional)
+            Method to sample particles from probability density function.
+            Call signature: `sample(prob_func: Callable, size: int) -> torch.Tensor`,
+            where `prob_func(x: torch.Tensor) -> torch.Tensor returns the probability density
+            at point `x`.
+        n_samples : int (optional)
+            The number of samples to draw if mode="sample".
+        device : str, torch.device, None
+            A torch device if running on GPU. This is not working currently; run on cpu.
+        """
         self.device = device
         self.verbose = verbose
-
-        self.d = d
-        self.epoch = 0
-        self.interpolate = interpolate
         self.mode = mode
+        self.ndim = ndim
+        self.epoch = 0
 
         self.d_meas = [[]]
         self.d_int = [[]]
@@ -192,7 +144,7 @@ class MENT:
         self.transforms = transforms
         self.diagnostics = self.set_diagnostics(diagnostics)
         self.measurements = self.set_measurements(measurements)
-        self.discrepancy_function = get_loss_function(discrepancy_function)
+        self.discrepancy_function = discrepancy_function
 
         self.prior = prior
         if self.prior is None:
@@ -204,57 +156,42 @@ class MENT:
         self.sampler = sampler
         self.n_samples = n_samples
 
-        self.lagrange_functions = self.initialize_lagrange_functions()
+        self.lagrange_functions = self.initialize_lagrange_functions(**interpolation_kws)
 
     def send(self, x):
-        """Send tensor to torch device."""
         return x.type(torch.float32).to(self.device)
 
     def set_diagnostics(self, diagnostics: List[List[Callable]]):
-        """Set the diagnostic lists."""
         self.diagnostics = diagnostics
         if self.diagnostics is None:
             self.diagnostics = [[]]
         return self.diagnostics
 
     def set_measurements(self, measurements: List[List[torch.Tensor]]):
-        """Set the measurement lists."""
         self.measurements = measurements
         if self.measurements is None:
             self.measurements = [[]]
-
-        if len(self.measurements) > 0:
-            self.d_meas = []
-            self.d_int = []
-            for index in range(len(self.measurements)):
-                self.d_meas.append([meas.ndim for meas in self.measurements[index]])
-                self.d_int.append([self.d - meas.ndim for meas in self.measurements[index]])
         return self.measurements
 
-    def initialize_lagrange_functions(self) -> List[List[torch.Tensor]]:
-        """Initialize the model to the prior distribution and set multipliers to
-        zero where the measurement is zero."""
+    def initialize_lagrange_functions(self, **interp_kws) -> List[List[torch.Tensor]]:
         self.lagrange_functions = []
         for index in range(len(self.measurements)):
             self.lagrange_functions.append([])
             for measurement, diagnostic in zip(self.measurements[index], self.diagnostics[index]):
-                values = measurement > 0.0
-                values = values.float()
-                
+                edges = diagnostic.bin_edges
                 if measurement.ndim == 1:
-                    coords = coords_from_edges(diagnostic.bin_edges)
+                    coords = coords_from_edges(edges)
                 else:
-                    coords = [coords_from_edges(e) for e in diagnostic.bin_edges]
-
-                lagrange_function = LagrangeFunction(coords, values)
+                    coords = [coords_from_edges(e) for e in edges]
+                values = (meas > 0.0).float()
+                lagrange_function = LagrangeFunction(coords, values, **interp_kws)
                 self.lagrange_functions[-1].append(lagrange_function)
         return self.lagrange_functions
 
     def normalize_projection(self, projection: torch.Tensor, index: int, diag_index: int) -> torch.Tensor:
-        """Normalize the projection."""
         diagnostic = self.diagnostics[index][diag_index]
         bin_volume = 1.0
-        if self.d_meas[index][diag_index] == 1:
+        if diagnostic.ndim == 1:
             bin_volume = diagnostic.bin_edges[1] - diagnostic.bin_edges[0]
         else:
             bin_volume = math.prod((e[1] - e[0]) for e in diagnostic.bin_edges)
@@ -308,29 +245,29 @@ class MENT:
         u_proj = diagnostic.project(u)
         u_proj = grab(u_proj)
         values = lagrange_function(u_proj)
-        values = torch.clamp(values, 0.0, None)
         values = self.send(values)
         return values
 
-    def log_prob(self, x: torch.Tensor) -> torch.Tensor:
+    def log_prob(self, x: torch.Tensor, pad: float = 1.00e-12) -> torch.Tensor:
         """Return the log probability density at points x."""
-        log_prob = torch.ones(x.shape[0])
-        log_prob = self.send(log_prob)
+        return torch.log(self.prob(x) + pad)
+
+    def prob(self, x: torch.Tensor) -> torch.Tensor:
+        """Return the probability density at points x."""
+        prob = torch.ones(x.shape[0])
+        prob = self.send(prob)
         for index, transform in enumerate(self.transforms):
             u = transform(x)
             for diag_index, diagnostic in enumerate(self.diagnostics[index]):
                 h = self.evaluate_lagrange_function(u, index, diag_index)
-                log_prob += torch.log(h + 1.00e-12)
-        log_prob += self.prior.log_prob(x)
-        return log_prob
-
-    def prob(self, x: torch.Tensor) -> torch.Tensor:
-        """Return the probability density at points x."""
-        return torch.exp(self.log_prob(x))
+                h = torch.clamp(h, 0.0, 1.00e+10)  # stability
+                prob *= h
+        prob *= torch.exp(self.prior.log_prob(x))
+        return prob
 
     def sample(self, n: int) -> torch.Tensor:
         """Sample n particles from the distribution."""
-        x = self.sampler(log_prob_func=self.log_prob, n=n)
+        x = self.sampler(self.prob, n=n)
         x = self.send(x)
         return x
 
@@ -441,12 +378,16 @@ class MENT:
                 measurement = self.measurements[index][diag_index]
                 
                 prediction = self._simulate(index, diag_index, **kws)
-                prediction[prediction < (torch.max(prediction) * thresh)] = 0.0
+                thresh = torch.max(prediction) * thresh
+                prediction[prediction < thresh] = 0.0
+
+                # print(index, diag_index, lagrange_function.values.max())
                 
                 shape = lagrange_function.shape
                 lagrange_function.values = torch.ravel(lagrange_function.values)
                 for k, (g_meas, g_pred) in enumerate(zip(torch.ravel(measurement), torch.ravel(prediction))):
                     if (g_meas != 0.0) and (g_pred != 0.0):
+                        frac = g_meas
                         lagrange_function.values[k] *= 1.0 + omega * ((g_meas / g_pred) - 1.0)
                 lagrange_function.values = torch.reshape(lagrange_function.values, shape)
                 lagrange_function.set_values(lagrange_function.values)

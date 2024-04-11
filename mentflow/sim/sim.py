@@ -10,7 +10,7 @@ def forward(
     transforms: List[Type[nn.Module]],
     diagnostics: List[List[Type[nn.Module]]]
 ) -> List[List[torch.Tensor]]:
-    """Forward process.
+    """Compute projections from initial coordinates and transforms/diagnostic set. 
 
     Parameters
     ----------

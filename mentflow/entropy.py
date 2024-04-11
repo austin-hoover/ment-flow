@@ -1,5 +1,5 @@
-"""Methods to estimate entropy from samples and/or probability density."""
-import typing
+"""Methods to estimate (negative) entropy from samples and/or probability density."""
+from typing import Any
 from typing import Optional
 
 import numpy as np
@@ -8,7 +8,7 @@ import torch
 
 class EntropyEstimator(torch.nn.Module):
     """Estimates negative entropy from samples and/or log probability."""
-    def __init__(self, prior=None) -> None:
+    def __init__(self, prior: Any = None) -> None:
         super().__init__()
         self.prior = prior
 
@@ -18,7 +18,7 @@ class EntropyEstimator(torch.nn.Module):
 
 class EmptyEntropyEstimator(EntropyEstimator):
     """Returns zero."""
-    def __init__(self, prior=None):
+    def __init__(self, prior: Any = None) -> None:
         super().__init__(prior=prior)
 
     def forward(self, x: torch.Tensor, log_prob: torch.Tensor = None) -> torch.Tensor:
@@ -27,7 +27,7 @@ class EmptyEntropyEstimator(EntropyEstimator):
 
 class CovarianceEntropyEstimator(EntropyEstimator):
     """Estimates negative entropy from covariance matrix."""
-    def __init__(self, prior=None, pad=1.00e-12):
+    def __init__(self, prior: Any = None, pad: float = 1.00e-12) -> None:
         if prior is not None:
             raise ValueError("This class cannot estimate relative entropy (prior != None).")
         super().__init__(prior=prior)
@@ -41,7 +41,7 @@ class CovarianceEntropyEstimator(EntropyEstimator):
 
 class KNNEntropyEstimator(EntropyEstimator):
     """Estimates negative entropy from k nearest neighbors."""
-    def __init__(self, prior=None, k=5):
+    def __init__(self, prior: Any = None, k: int = 5) -> None:
         if prior is not None:
             raise ValueError("This class cannot estimate relative entropy (prior != None).")
         super().__init__(prior=prior)
@@ -52,8 +52,8 @@ class KNNEntropyEstimator(EntropyEstimator):
 
 
 class MonteCarloEntropyEstimator(EntropyEstimator):
-    """Estimates negative entropy using Monte Carlo integral approximation."""
-    def __init__(self, prior=None):
+    """Estimates negative entropy from Monte Carlo."""
+    def __init__(self, prior: Any = None) -> None:
         super().__init__(prior=prior)
 
     def forward(self, x: torch.Tensor, log_prob: torch.tensor) -> torch.Tensor:
@@ -62,13 +62,3 @@ class MonteCarloEntropyEstimator(EntropyEstimator):
             H = H - torch.mean(self.prior.log_prob(x))
         return H
         
-
-def get_entropy_estimator(name, **kws):
-    constructor = EmptyEntropyEstimator
-    if name == "cov": 
-        constructor = CovarianceEntropyEstimator
-    elif name == "knn": 
-        constructor = KNNEntropyEstimator
-    elif name == "mc":
-        constructor = MonteCarloEntropyEstimator
-    return constructor(**kws)

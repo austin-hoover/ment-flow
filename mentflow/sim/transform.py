@@ -1,19 +1,14 @@
 """Differentiable transformations.
 
-See the bmad-x repository for particle accelerator modeling capabilities (https://github.com/bmad-sim/Bmad-X).
+See the bmad-x repository for accelerator modeling capabilities (https://github.com/bmad-sim/Bmad-X).
 """
 import math
-import typing
-import weakref
-from typing import List
-from typing import Tuple
-
 import numpy as np
 import torch
 import torch.nn as nn
 
 
-def rotation_matrix(angle):
+def rotation_matrix(angle: float) -> torch.Tensor:
     _cos = np.cos(angle)
     _sin = np.sin(angle)
     return torch.tensor([[_cos, _sin], [-_sin, _cos]])
@@ -80,7 +75,7 @@ class LinearTransform(Transform):
 
 
 class MultipoleTransform(Transform):
-    """Apply multipole kick.
+    """Applies multipole kick.
     
     https://github.com/PyORBIT-Collaboration/PyORBIT3/blob/main/src/teapot/teapotbase.cc    
     
@@ -99,7 +94,7 @@ class MultipoleTransform(Transform):
         self.strength = strength
         self.skew = skew
         
-    def forward(self, X):
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
 
         U = X.clone()
         
@@ -151,7 +146,8 @@ class MultipoleTransform(Transform):
 
 
 class ProjectionTransform(Transform):
-    def __init__(self, direction: torch.Tensor):
+    """Computes 1D projection along specified direction."""
+    def __init__(self, direction: torch.Tensor) -> None:
         super().__init__()
         self.direction = direction / torch.norm(direction)
 

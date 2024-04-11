@@ -26,8 +26,10 @@ def random_choice(items: torch.tensor, n: int, pdf: torch.Tensor):
 def sample_hist_bins(hist: torch.Tensor, n: int) -> torch.Tensor:
     pdf = torch.ravel(hist)
     idx = torch.squeeze(torch.nonzero(pdf))
-    pdf = pdf[idx]
-    pdf = pdf / torch.sum(pdf)
+    pdf = pdf[idx]    
+    pdf_sum = torch.sum(pdf)    
+    if pdf_sum > 0.0:
+        pdf = pdf / pdf_sum
     idx = random_choice(idx, n, pdf=pdf)
     idx = torch.unravel_index(idx, hist.shape)
     return idx
@@ -118,11 +120,10 @@ class GridSampler:
             self.grid_points = grid_points
         return grid_points
 
-    def __call__(self, log_prob_func: Callable, n: int) -> torch.Tensor:
+    def __call__(self, prob_func: Callable, n: int) -> torch.Tensor:
         grid_points = self.get_grid_points()
         grid_points = self.send(grid_points)
-        log_prob = log_prob_func(grid_points)
-        prob = torch.exp(log_prob)
+        prob = prob_func(grid_points)
         prob = torch.reshape(prob, self.grid_shape)
         x = sample_hist(prob, bin_edges=self.grid_edges, n=n, noise=self.noise, device=self.device)
         x = self.send(x)
@@ -239,12 +240,12 @@ class SliceGridSampler:
         rho = torch.reshape(rho, self.proj_grid_shape)
         return rho
 
-    def __call__(self, log_prob_func: Callable, n: int) -> torch.Tensor:
+    def __call__(self, prob_func: Callable, n: int) -> torch.Tensor:
         # Compute projection.
         if self.verbose:
             print("Projecting")
 
-        proj = self.project(lambda x: torch.exp(log_prob_func(x)))
+        proj = self.project(prob_func)
         proj = self.send(proj)
         proj = proj / torch.sum(proj)
 
@@ -281,7 +282,7 @@ class SliceGridSampler:
                 self.eval_points[:, axis] = self.proj_grid_coords[axis][index]
 
             # Grid sample.
-            prob = torch.exp(log_prob_func(self.eval_points))
+            prob = prob_func(self.eval_points)
             prob = torch.reshape(prob, self.samp_grid_shape)
             y[:, self.samp_axis] = sample_hist(
                 prob, self.samp_grid_edges, n=size, noise=self.noise

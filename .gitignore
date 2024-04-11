@@ -4,4 +4,5 @@ outputs
 .ipynb_checkpoints
 .DS_Store
 .idea
+*.egg-info
 

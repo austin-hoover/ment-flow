@@ -1,4 +1,5 @@
 from typing import Iterable
+from typing import Callable
 import torch
 import ot
 
@@ -19,24 +20,14 @@ def kld(pred: torch.Tensor, targ: torch.Tensor, pad=1.00e-12) -> torch.Tensor:
     return torch.nn.functional.kl_div(log_pred, targ, reduction="batchmean")
 
 
-def get_loss_function(name):
-    if name == "mae":
-        return mae
-    elif name == "mse":
-        return mse
-    elif name == "kld":
-        return kld
-    else:
-        raise ValueError(f"Invalid loss function name {name}")
-
-
 class SlicedWassersteindDistance:
-    def __init__(self, n_projections=50, p=2, device=None):
+    """Sliced Wasserstein Distance (SWD)."""
+    def __init__(self, n_projections: int = 50, p: int = 2, device=None) -> None:
         self.n_projections = n_projections
         self.p = p
         self.device = device
     
-    def __call__(self, x1, x2): 
+    def __call__(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor: 
         if x1.shape[1] != x2.shape[1]:
             raise ValueError(f"x1.shape[1]={x1.shape} != x2.shape[1]={x2.shape})")
 
