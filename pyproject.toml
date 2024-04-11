@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mentflow"
+version = "0.0.1"
+dependencies = [
+    "gitpython",
+    "hydra-core",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pot",
+    # "proplot",
+    "psdist",
+    "scipy>=1.10",
+    "scikit-image",
+    "torch",
+    "tqdm",
+    "zuko",
+]
+# requires-python = ">=3.10"
+authors = [
+  {name = "Austin Hoover"},
+]
+description = "Maximum entropy tomography using normalizing flows"
+readme = "README.md"
+
+[project.urls]
+Repository = "https://github.com/austin-hoover/ment-flow.git"
