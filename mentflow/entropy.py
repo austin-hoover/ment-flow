@@ -1,4 +1,3 @@
-"""Methods to estimate (negative) entropy from samples and/or probability density."""
 from typing import Any
 from typing import Optional
 

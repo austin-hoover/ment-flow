@@ -1,7 +1,7 @@
 import torch
 
 
-class GaussianPrior:
+class Gaussian:
     def __init__(self, ndim: int = 2, scale: float = 1.0, device=None) -> None:
         self.ndim = ndim
         self.scale = scale
@@ -26,7 +26,7 @@ class GaussianPrior:
         return self._dist.log_prob(x)
 
 
-class UniformPrior:
+class Uniform:
     def __init__(self, ndim: int = 2, scale: float = 100.0, device: torch.device = None) -> None:
         self.scale = scale
         self.ndim = ndim

@@ -18,7 +18,7 @@ def main(cfg: DictConfig):
 
     transforms, diagnostics, measurements = setup.generate_training_data(
         cfg,
-        make_dist=setup.make_dist,
+        make_distribution=setup.make_distribution,
         make_diagnostics=setup.make_diagnostics,
         make_transforms=setup.make_transforms,
     )

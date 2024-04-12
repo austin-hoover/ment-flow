@@ -4,10 +4,10 @@ import functools
 import torch
 import zuko
 
-from .gen import GenModel
-from .nn import NNGen
-from .nn import NNTransformer
-from .flow import WrappedZukoFlow
+from .base import GenerativeModel
+from .nn import NNTransform
+from .nn import NNGenerator
+from .flows import WrappedZukoFlow
 
 
 def build_flow(
@@ -22,7 +22,7 @@ def build_flow(
 ) -> WrappedZukoFlow:
     """Build normalizing flow (mentflow.gen.WrappedZukoFlow)."""
     constructors = {
-        # "bpf": zuko.flows.BPF,
+        "bpf": zuko.flows.BPF,
         "ffjord": zuko.flows.CNF,
         "gf": zuko.flows.GF,
         "maf": zuko.flows.MAF,
@@ -54,7 +54,7 @@ def build_nn(
     dropout: int,
     activation: str,
     device=None,
-) -> NNGen:
+) -> NNGenerator:
     """Build neural network generator (mentflow.gen.NN)."""
     loc = torch.zeros(input_features)
     loc = loc.type(torch.float32)
@@ -66,7 +66,7 @@ def build_nn(
 
     base = torch.distributions.MultivariateNormal(loc, cov)
     
-    transformer = NNTransformer(
+    transform = NNTransform(
         input_features=input_features,
         output_features=output_features,
         hidden_layers=hidden_layers,
@@ -74,16 +74,17 @@ def build_nn(
         dropout=dropout,
         activation=activation,
     )
-    return NNGen(base, transformer)
+    return NNGenerator(base, transform)
 
 
-def build_gen(name: str, device=None, **kws) -> GenModel:
+def build_generator(name: str, device: torch.device = None, **kws) -> GenerativeModel:
     """Build generative model.
 
     Parameters
     ----------
     name: str
-        - Invertible neural networks (see zuko docs):
+        - Invertible neural networks (normalizing flows) (see zuko docs):
+            - "bpf": zuko.flows.BPF,
             - "ffjord": zuko.flows.FFJORD
             - "gf": zuko.flows.GF
             - "gmm": zuko.flows.GMM
@@ -95,16 +96,32 @@ def build_gen(name: str, device=None, **kws) -> GenModel:
         - Non-invertible neural networks:
             - "nn": mentflow.gen.NNGen
     device: torch.device
+        Torch device.
     **kws
-        Key word arguments are passed to the model constructor.
+        Key word arguments are passed to the generative model constructor.
 
     Returns
     -------
-    mentflow.gen.GenModel
+    mentflow.gen.GenerativeModel
         Trainable generative model.
     """
-    build = None
     if name == "nn":
         return build_nn(device=device, **kws)
-    else:
+    elif name in [
+        "bpf",
+        "ffjord",
+        "gf",
+        "gmm",
+        "maf",
+        "nag",
+        "nsf",
+        "sospf",
+        "unaf",
+    ]:        
         return build_flow(name=name, device=device, **kws)
+    else:
+        raise ValueError(f"Invalid generative model name '{name}'")
+
+
+
+

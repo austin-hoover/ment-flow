@@ -10,7 +10,7 @@ from experiments.setup import setup_ment_model
 from experiments.setup import train_ment_model
 from experiments.setup import generate_training_data
 from experiments.rec_2d.setup import make_diagnostics
-from experiments.rec_2d.setup import make_dist
+from experiments.rec_2d.setup import make_distribution
 from experiments.rec_2d.setup import setup_eval
 from experiments.rec_2d.setup import setup_plot
 
@@ -28,10 +28,10 @@ def make_transforms(cfg: DictConfig):
     )
     transforms = []
     for angle in angles:
-        matrix = mf.sim.rotation_matrix(angle)
+        matrix = mf.simulate.rotation_matrix(angle)
         matrix = matrix.type(torch.float32)
         matrix = matrix.to(cfg.device)
-        transform = mf.sim.LinearTransform(matrix)
+        transform = mf.simulate.LinearTransform(matrix)
         transform = transform.to(cfg.device)
         transforms.append(transform)
     return transforms

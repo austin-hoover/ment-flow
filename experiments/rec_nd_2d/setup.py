@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 import mentflow as mf
+from mentflow.sim import rotation_matrix
 from mentflow.utils import unravel
 
 from experiments.setup import generate_training_data
@@ -24,9 +25,9 @@ mf.train.plot.set_proplot_rc()
 
 def make_transforms(cfg: DictConfig):
     transforms = []
-    
+
+    # Measure all 2D projections in corner plot.
     if cfg.meas.optics == "corner":
-        transforms = []
         axis_meas = (0, 2)
         for i in range(cfg.d):
             for j in range(i):
@@ -39,6 +40,21 @@ def make_transforms(cfg: DictConfig):
                     matrices.append(matrix)
                 matrix = torch.linalg.multi_dot(matrices[::-1])
                 
+                transform = mf.sim.LinearTransform(matrix)
+                transform = transform.to(cfg.device)
+                transforms.append(transform)
+
+    # Grid scan mux and muy. Valid for 4D reconstructions.
+    elif cfg.meas.optics == "phase_scan":
+        axis_meas = (0, 2)
+        phases_x = torch.linspace(0.0, 2.0 * np.pi, cfg.meas.num)
+        phases_y = phases_x
+        for mux in phases_x:
+            for muy in phases_y:
+                matrix = torch.eye(cfg.d)
+                matrix[0:2, 0:2] = rotation_matrix(mux)
+                matrix[2:4, 2:4] = rotation_matrix(muy)
+                matrix = matrix.float()
                 transform = mf.sim.LinearTransform(matrix)
                 transform = transform.to(cfg.device)
                 transforms.append(transform)
@@ -113,7 +129,7 @@ def setup_plot(cfg: DictConfig) -> Callable:
     plot = mf.train.plot.PlotModel(
         dist=make_dist(cfg), 
         n_samples=cfg.plot.size, 
-        plot_proj=plot_proj, 
+        plot_proj=plot_proj,
         plot_dist=plot_dist, 
         device=cfg.device,
     )

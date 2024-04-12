@@ -4,18 +4,15 @@ import torch
 import ot
 
 
-def mae(pred: torch.Tensor, targ: torch.Tensor) -> torch.Tensor:
-    """Mean absolute error."""
+def mean_absolute_error(pred: torch.Tensor, targ: torch.Tensor) -> torch.Tensor:
     return torch.mean(torch.abs(pred - targ))
 
 
-def mse(pred: torch.Tensor, targ: torch.Tensor) -> torch.Tensor:
-    """Mean squared error."""
+def mean_square_error(pred: torch.Tensor, targ: torch.Tensor) -> torch.Tensor:
     return torch.mean(torch.square(pred - targ))
 
 
-def kld(pred: torch.Tensor, targ: torch.Tensor, pad=1.00e-12) -> torch.Tensor:
-    """Pointwise KL divergence."""
+def kl_divergence(pred: torch.Tensor, targ: torch.Tensor, pad=1.00e-12) -> torch.Tensor:
     log_pred = torch.log(pred + pad)
     return torch.nn.functional.kl_div(log_pred, targ, reduction="batchmean")
 

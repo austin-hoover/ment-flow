@@ -11,51 +11,52 @@ from omegaconf import OmegaConf
 import mentflow as mf
 from mentflow.utils import unravel
 
+from experiments.setup import get_discrepancy_function
 
-def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
+
+def make_diagnostics(cfg: DictConfig) -> List[mf.diagnostics.Diagnostic]:
     """Make one-dimensional histogram diagnostic."""
     device = torch.device(cfg.device)
     
-    bin_edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
-    bin_edges = bin_edges.type(torch.float32)
-    bin_edges = bin_edges.to(device)
+    edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
+    edges = edges.type(torch.float32)
+    edges = edges.to(device)
     
-    diagnostic = mf.diag.Histogram1D(
+    diagnostic = mf.diagnostics.Histogram1D(
         axis=0, 
-        bin_edges=bin_edges, 
+        edges=edges, 
+        kde=True,
+        bandwidth=cfg.meas.bandwidth,
+        noise=True,
         noise_scale=cfg.meas.noise_scale, 
         noise_type=cfg.meas.noise_type,
-        bandwidth=cfg.meas.bandwidth,
         device=cfg.device,
         seed=cfg.seed,
     )
     diagnostic = diagnostic.to(device)
-    diagnostics = [diagnostic,]
+    diagnostics = [diagnostic,]  # one measurement per transform
     return diagnostics
 
 
-def make_dist(cfg: DictConfig) -> mf.dist.Distribution:
+def make_distribution(cfg: DictConfig) -> mf.distributions.Distribution:
     """Make two-dimensional synthetic distribution from config."""
     kws = OmegaConf.to_container(cfg.dist)
     kws["seed"] = cfg.seed
     kws.pop("size", None)
-    dist = mf.dist.dist_2d.gen_dist(**kws)
+    dist = mf.distributions.get_distribution(**kws)
     return dist
     
 
 def setup_plot(cfg: DictConfig) -> Callable:
     """Set up plot function from config."""
-    plot_proj = mf.train.plot.PlotProj1D(
-        maxcols=7,
-        kind=cfg.plot.line_kind,
-    )
+    plot_proj = mf.train.plot.PlotProj1D(maxcols=7, kind=cfg.plot.line_kind)
     plot_dist = mf.train.plot.PlotDist2D(
         fig_kws=None,
         bins=cfg.plot.bins,
         limits=(2 * [(-cfg.eval.xmax, +cfg.eval.xmax)])
     )
     plot = mf.train.plot.PlotModel(
-        dist=make_dist(cfg), 
+        dist=make_distribution(cfg), 
         n_samples=cfg.plot.size, 
         plot_proj=plot_proj, 
         plot_dist=plot_dist,
@@ -74,9 +75,9 @@ def setup_eval(cfg: DictConfig) -> Callable:
         x_pred = model.sample(cfg.eval.size)
         x_pred = x_pred.type(torch.float32)
         x_pred = x_pred.to(device)
-        predictions = mf.sim.forward(x_pred, model.transforms, model.diagnostics)    
+        predictions = mf.simulate.forward(x_pred, model.transforms, model.diagnostics)    
 
-        discrepancy_function = mf.loss.get_loss_function(cfg.eval.disc)
+        discrepancy_function = get_discrepancy_function(cfg.eval.discrepancy)
 
         discrepancy_vector = []
         for y_pred, y_meas in zip(unravel(predictions), unravel(model.measurements)):
@@ -86,12 +87,12 @@ def setup_eval(cfg: DictConfig) -> Callable:
 
         # Compute distance between true/predicted samples.   
         distance_function = None
-        if cfg.eval.dist == "swd":
+        if cfg.eval.distance == "swd":
             distance_function = mf.loss.SlicedWassersteindDistance(n_projections=50, p=2, device=device)
 
         distance = None
         if distance_function is not None:
-            distribution = make_dist(cfg)
+            distribution = make_distribution(cfg)
             n_samples = cfg.eval.size
             x_true = distribution.sample(n_samples)    
             x_true = x_true.type(torch.float32)

@@ -13,7 +13,8 @@ from mentflow.utils import unravel
 def set_proplot_rc():
     """Set proplot style."""
     pplt.rc["cmap.discrete"] = False
-    pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
+    # pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
+    pplt.rc["cmap.sequential"] = "viridis"
     pplt.rc["cycle"] = "538"
     pplt.rc["grid"] = False
     pplt.rc["figure.facecolor"] = "white"
@@ -334,7 +335,7 @@ class PlotModel:
         x_pred = self.send(x_pred)
 
         # Simulate measurements.
-        predictions = mf.sim.forward(x_pred, model.transforms, model.diagnostics)
+        predictions = mf.simulate.forward(x_pred, model.transforms, model.diagnostics)
 
         figs = []
 
@@ -351,10 +352,10 @@ class PlotModel:
             edges = []
             for index, transform in enumerate(model.transforms):
                 for diagnostic in model.diagnostics[index]:
-                    if type(diagnostic.bin_edges) in [tuple, list]:
-                        edges.append([grab(e) for e in diagnostic.bin_edges])
+                    if type(diagnostic.edges) in [tuple, list]:
+                        edges.append([grab(e) for e in diagnostic.edges])
                     else:
-                        edges.append(grab(diagnostic.bin_edges))
+                        edges.append(grab(diagnostic.edges))
             for function in self.plot_proj:
                 fig, axs = function(y_meas, y_pred, edges)
                 figs.append(fig)

@@ -5,7 +5,7 @@ import torch
 from mentflow.types_ import Distribution
 
 
-class GenModel(Distribution, torch.nn.Module):
+class GenerativeModel(Distribution, torch.nn.Module):
     """Base class for generative models."""
     def forward(self, z: torch.Tensor, **kws) -> torch.Tensor:
         raise NotImplementedError
@@ -19,7 +19,7 @@ class GenModel(Distribution, torch.nn.Module):
     def inverse_steps(self, x: torch.Tensor) -> List[torch.Tensor]:
         raise NotImplementedError
 
-    def sample_base(self, n: int) -> torch.Tensor:
+    def sample_base(self, size: int) -> torch.Tensor:
         raise NotImplementedError
 
     def dim(self) -> int:

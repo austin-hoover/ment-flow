@@ -7,11 +7,11 @@ from typing import Union
 import numpy as np
 import torch
 
-from mentflow.diag.hist import kde_histogram_1d
-from mentflow.diag.hist import kde_histogram_2d
 from mentflow.utils import coords_from_edges
 from mentflow.utils import grab
 from mentflow.utils import unravel
+from .histogram import kde_histogram_1d
+from .histogram import kde_histogram_2d
 
 
 class Diagnostic(torch.nn.Module):

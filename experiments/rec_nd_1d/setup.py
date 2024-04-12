@@ -36,9 +36,11 @@ def make_transforms(cfg: DictConfig):
     transforms = []
     for direction in directions:
         
+        ## Projection transform computes dot product.
         # transform = mf.sim.ProjectionTransform(direction)
 
-        ## Use matrix so transformation is invertible.
+        ## Use matrix so transformation is invertible. We will not be
+        ## measuring the other dimensions so ignore those.
         M = torch.eye(cfg.d)
         M[0, :] = direction
         M = M.float().to(device)
@@ -116,6 +118,9 @@ def setup_plot(cfg: DictConfig) -> Callable:
             
             mask=True,
             diag_kws=dict(kind="line", lw=1.30),
+            
+            rms_ellipse=True,
+            rms_ellipse_kws=dict(level=2.0, color="pink"),
         ),
     ]
     plot = mf.train.plot.PlotModel(
@@ -140,7 +145,7 @@ def setup_eval(cfg: DictConfig) -> Callable:
         x_pred = x_pred.to(device)
         predictions = mf.sim.forward(x_pred, model.transforms, model.diagnostics)    
 
-        discrepancy_function = mf.loss.get_loss_function(cfg.eval.disc)
+        discrepancy_function = mf.loss.get_loss_function(cfg.eval.discrepancy)
 
         discrepancy_vector = []
         for y_pred, y_meas in zip(unravel(predictions), unravel(model.measurements)):
@@ -150,7 +155,7 @@ def setup_eval(cfg: DictConfig) -> Callable:
 
         # Compute distance between true/predicted samples.   
         distance_function = None
-        if cfg.eval.dist == "swd":
+        if cfg.eval.distance == "swd":
             distance_function = mf.loss.SlicedWassersteindDistance(n_projections=50, p=2, device=device)
 
         distance = None

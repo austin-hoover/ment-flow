@@ -1,4 +1,4 @@
 epochs: 10
-batch_size: 1000000
-omega: 1.0
+batch_size: 1_000_000
+lr: 0.90
 dmax: 0.0

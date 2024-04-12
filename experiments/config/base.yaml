@@ -12,6 +12,8 @@ hydra:
             _target_: experiments.callback.GitSHACallback
     output_subdir: ".hydra"
 
+ndim: 2
+
 meas:
     num: 6
     xmax: 3.5
@@ -23,8 +25,8 @@ meas:
 eval:
     freq: null
     size: 50000
-    disc: kld  # discrepancy (y_meas, y_model)
-    dist: swd  # distance between (x_meas, x_model)
+    discrepancy: kld  # discrepancy (y_meas, y_model)
+    distance: swd  # distance between (x_meas, x_model)
     xmax: 3.5
 
 plot:
@@ -33,5 +35,3 @@ plot:
     ext: png
     dpi: 300
     line_kind: "line"
-
-d: 2

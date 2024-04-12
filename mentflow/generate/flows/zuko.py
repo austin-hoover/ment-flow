@@ -4,10 +4,10 @@ from typing import Tuple
 import torch
 import zuko
 
-from mentflow.gen import GenModel
+from ..base import GenerativeModel
 
 
-class WrappedZukoFlow(GenModel):
+class WrappedZukoFlow(GenerativeModel):
     def __init__(self, flow: zuko.flows.Flow):
         super().__init__()
         self._flow = flow

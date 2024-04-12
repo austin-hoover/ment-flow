@@ -1,13 +1,12 @@
-disc: kld
+discrepancy: kld
 prior: gaussian
 prior_scale: 1.0
-interp: linear
+interpolation: linear
 mode: integrate
-int:
-    method: grid
+integration:
     res: 250
-samp:
-    method: grid
+    xmax: null
+sampling:
     res: 250
     noise: 0.0
 verbose: false

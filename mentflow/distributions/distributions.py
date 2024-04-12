@@ -333,6 +333,6 @@ DISTRIBUTIONS = {
 }
 
 
-def get_dist(name: str, **kws) -> Distribution:
+def get_distribution(name: str, **kws) -> Distribution:
     return DISTRIBUTIONS[name](**kws)
 

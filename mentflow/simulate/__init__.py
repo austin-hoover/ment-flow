@@ -1,2 +1,2 @@
-from .sim import *
+from .simulate import *
 from .transform import *

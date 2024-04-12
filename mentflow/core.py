@@ -9,8 +9,8 @@ import torch.nn as nn
 import zuko
 
 from mentflow.entropy import EntropyEstimator
-from mentflow.gen import GenModel
-from mentflow.sim import forward
+from mentflow.generate import GenerativeModel
+from mentflow.simulate import forward
 from mentflow.types_ import Model
 from mentflow.utils import unravel
 
@@ -22,7 +22,7 @@ class MENTFlow(Model, nn.Module):
         transforms: List[Type[nn.Module]],
         diagnostics: List[List[Type[nn.Module]]],
         measurements: List[List[torch.Tensor]],
-        gen: GenModel,
+        generator: GenerativeModel,
         prior: Type[nn.Module],
         entropy_estimator: Callable,
         discrepancy_function: str = "kld",
@@ -38,7 +38,7 @@ class MENTFlow(Model, nn.Module):
             diagnostics[i] is a list of diagnostics applied after the ith transform.
         measurements : list[list[tensor]
             Measured data corresponding to each diagnostic.
-        gen : GenModel
+        generator : GenerativeModel
             A trainable model that generates samples and (possibly) evalutes the probability 
             density.
         entropy_estimator : Any
@@ -55,9 +55,9 @@ class MENTFlow(Model, nn.Module):
         self.diagnostics = self.set_diagnostics(diagnostics)
         self.measurements = self.set_measurements(measurements)
 
-        self.gen = gen
+        self.generator = generator
         self.entropy_estimator = entropy_estimator
-        self.discrepancy_function = get_loss_function(discrepancy_function)
+        self.discrepancy_function = discrepancy_function
         self.penalty_parameter = penalty_parameter
 
     def set_diagnostics(self, diagnostics: List[Type[nn.Module]]):
@@ -73,13 +73,13 @@ class MENTFlow(Model, nn.Module):
         return self.measurements
 
     def sample(self, size: int) -> torch.Tensor:
-        return self.gen.sample(int(size))
+        return self.generator.sample(int(size))
 
     def log_prob(self, x: torch.Tensor) -> torch.Tensor:
-        return self.gen.log_prob(x)
+        return self.generator.log_prob(x)
 
     def sample_and_log_prob(self, size: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.gen.sample_and_log_prob(n)
+        return self.generator.sample_and_log_prob(size)
 
     def sample_and_entropy(self, n: int) -> Tuple[torch.Tensor, torch.Tensor]:
         x, log_prob = self.sample_and_log_prob(n)
@@ -92,12 +92,12 @@ class MENTFlow(Model, nn.Module):
             discrepancy_vector.append(self.discrepancy_function(pred, meas))
         return discrepancy_vector
 
-    def loss(self, size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
+    def loss(self, batch_size: int) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
         """Estimate the loss from a new batch.
 
         Parameters
         ----------
-        size : int
+        batch_size : int
             Number of particles to sample.
 
         Returns
@@ -110,18 +110,18 @@ class MENTFlow(Model, nn.Module):
         D : tensor, shape (len(measurements) * len(diagnostics))
             The discrepancy vector.
         """
-        x, H = self.sample_and_entropy(size)
+        x, H = self.sample_and_entropy(batch_size)
         predictions = forward(x, self.transforms, self.diagnostics)
         D = self.discrepancy_vector(predictions)
         L = H + self.penalty_parameter * (sum(D) / len(D))
         return (L, H, D)
 
     def parameters(self) -> Iterator[nn.Parameter]:
-        return self.gen.parameters()
+        return self.generator.parameters()
     
     def save(self, path) -> None:
         state = {
-            "gen": self.gen.state_dict(),
+            "generator": self.generator.state_dict(),
             "entropy_estimator": self.entropy_estimator,
             "transforms": self.transforms,
             "diagnostics": self.diagnostics,
@@ -132,7 +132,7 @@ class MENTFlow(Model, nn.Module):
     def load(self, path, device=None):
         state = torch.load(path, map_location=device)
         try:
-            self.gen.load_state_dict(state["gen"])
+            self.generator.load_state_dict(state["gen"])
         except RuntimeError:
             raise RuntimeError("Error loading generative model. Architecture mismatch?")
 
@@ -154,8 +154,8 @@ class MENTFlow(Model, nn.Module):
             for index in range(len(self.measurements)):
                 for measurement in self.measurements[index]:
                     measurement = measurement.to(device)
-        if self.gen is not None:
-            self.gen = self.gen.to(device)
+        if self.generator is not None:
+            self.generator = self.generator.to(device)
         return self
 
 

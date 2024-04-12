@@ -307,7 +307,7 @@ class MENTTrainer(Trainer):
     def train(
         self, 
         epochs: int, 
-        omega: float = 0.99, 
+        lr: float = 0.99, 
         thresh: float = 1.00e-10,
         savefig_kws: Optional[dict] = None,
         dmax: float = 0.0,
@@ -325,9 +325,11 @@ class MENTTrainer(Trainer):
         iteration = 0
         start_time = time.time()
         
-        for epoch in range(0, epochs + 1):
-            print("epoch = {}".format(epoch))
-
+        for epoch in range(epochs + 1):
+            if epoch > 0:
+                print("epoch = {}".format(epoch))
+                self.model.gauss_seidel_update(lr=lr, thresh=thresh)
+            
             # Log info.
             # (I think `eval_model` should return a dict with the data fit error and
             # the statistical distance from the true distribution. Then we can 
@@ -347,6 +349,3 @@ class MENTTrainer(Trainer):
                 if discrepancy <= dmax:
                     print("CONVERGED (dmax)")
                     return
-                
-            if epoch < epochs:
-                self.model.gauss_seidel_iterate(omega=omega, thresh=thresh)
