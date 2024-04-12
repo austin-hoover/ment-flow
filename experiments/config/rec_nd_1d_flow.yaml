@@ -16,4 +16,4 @@ train:
     penalty_scale: 1.5
     penalty_step: 50.0
 
-d: 4
+ndim: 4

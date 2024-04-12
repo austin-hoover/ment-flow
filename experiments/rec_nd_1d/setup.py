@@ -16,71 +16,70 @@ from experiments.setup import setup_mentflow_model
 from experiments.setup import train_mentflow_model
 from experiments.setup import setup_ment_model
 from experiments.setup import train_ment_model
-
+from experiments.setup import get_discrepancy_function
 
 
 mf.train.plot.set_proplot_rc()
 
 
-def make_transforms(cfg: DictConfig):
-    """Generate rotation matrix transforms for uniformly spaced angles."""
+def make_transforms(cfg: DictConfig) -> List[Callable]:
     device = torch.device(cfg.device)
     
-    generator = torch.Generator(device=device)
+    rng = torch.Generator(device=device)
     if cfg.seed is not None:
-        generator.manual_seed(cfg.seed)
+        rng.manual_seed(cfg.seed)
 
-    directions = torch.randn((cfg.meas.num, cfg.d), generator=generator, device=device)
-    directions = directions / torch.norm(directions, dim=1)[:, None]
-    
-    transforms = []
-    for direction in directions:
+    if cfg.meas.optics == "isotropic":
+
+        shape = (cfg.meas.num, cfg.ndim)
+        directions = torch.randn(shape, generator=rng, device=device)
+        directions = directions / torch.norm(directions, dim=1)[:, None]
         
-        ## Projection transform computes dot product.
-        # transform = mf.sim.ProjectionTransform(direction)
+        transforms = []
+        for direction in directions:
+            # We only care about the first dimension.
+            M = torch.eye(cfg.ndim)
+            M[0, :] = direction
+            M = M.float().to(device)
+            
+            transform = mf.simulate.LinearTransform(M)
+            transform = transform.to(cfg.device)
+            transforms.append(transform)
+        return transforms
 
-        ## Use matrix so transformation is invertible. We will not be
-        ## measuring the other dimensions so ignore those.
-        M = torch.eye(cfg.d)
-        M[0, :] = direction
-        M = M.float().to(device)
-        transform = mf.sim.LinearTransform(M)
-        
-        transform = transform.to(cfg.device)
-        transforms.append(transform)
-    return transforms
+    else:
+        raise ValueError(f"Invalid cfg.meas.optics '{cfg.meas.optics}'")
 
 
-def make_diagnostics(cfg: DictConfig) -> List[mf.diag.Diagnostic]:
-    """Make one-dimensional histogram diagnostic."""
+def make_diagnostics(cfg: DictConfig) -> List[mf.diagnostics.Diagnostic]:
     device = torch.device(cfg.device)
     
-    bin_edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
-    bin_edges = bin_edges.type(torch.float32)
-    bin_edges = bin_edges.to(device)
+    edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
+    edges = edges.type(torch.float32)
+    edges = edges.to(device)
 
-    diagnostic = mf.diag.Histogram1D(
+    diagnostic = mf.diagnostics.Histogram1D(
         axis=0,
-        bin_edges=bin_edges, 
+        edges=edges, 
+        bandwidth=cfg.meas.bandwidth,
+        noise=True,
         noise_scale=cfg.meas.noise_scale, 
         noise_type=cfg.meas.noise_type,
-        bandwidth=cfg.meas.bandwidth,
         device=cfg.device,
         seed=cfg.seed,
     )
     diagnostic = diagnostic.to(device)
-    diagnostics = [diagnostic,]
+    diagnostics = [diagnostic,]  # one diagnostic per transform
     return diagnostics
 
 
-def make_dist(cfg: DictConfig) -> mf.dist.Distribution:
-    """Make n-dimensional distribution from config."""
+def make_distribution(cfg: DictConfig) -> mf.distributions.Distribution:
     kws = OmegaConf.to_container(cfg.dist)
-    kws["d"] = cfg.d
+    kws["ndim"] = cfg.ndim
     kws["seed"] = cfg.seed
     kws.pop("size", None)
-    dist = mf.dist.dist_nd.gen_dist(**kws)
-    return dist
+    distribution = mf.distributions.get_distribution(**kws)
+    return distribution
     
 
 def setup_plot(cfg: DictConfig) -> Callable:
@@ -92,39 +91,35 @@ def setup_plot(cfg: DictConfig) -> Callable:
         ),
     ]
     plot_dist = [
-        mf.train.plot.PlotDistRadialPDF(
-            fig_kws=None,
-            bins=50,
-            rmax=3.5,
-            kind="step",
-            lw=1.5,
-        ),
-        mf.train.plot.PlotDistRadialCDF(
-            fig_kws=None,
-            bins=50,
-            rmax=3.5,
-            kind="step",
-            lw=1.5,
-        ),
+        # mf.train.plot.PlotDistRadialPDF(
+        #     fig_kws=None,
+        #     bins=50,
+        #     rmax=3.5,
+        #     kind="step",
+        #     lw=1.5,
+        # ),
+        # mf.train.plot.PlotDistRadialCDF(
+        #     fig_kws=None,
+        #     bins=50,
+        #     rmax=3.5,
+        #     kind="step",
+        #     lw=1.5,
+        # ),
         mf.train.plot.PlotDistCorner(
             bins=85,
             discrete=False, 
-            limits=(cfg.d * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
+            limits=(cfg.ndim * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
             cmaps=[
                 pplt.Colormap("mono", right=0.95),
                 pplt.Colormap("mono", right=0.95),
             ],
             colors=["black", "black"],
-            
             mask=True,
             diag_kws=dict(kind="line", lw=1.30),
-            
-            rms_ellipse=True,
-            rms_ellipse_kws=dict(level=2.0, color="pink"),
         ),
     ]
     plot = mf.train.plot.PlotModel(
-        dist=make_dist(cfg), 
+        distribution=make_distribution(cfg), 
         n_samples=cfg.plot.size, 
         plot_proj=plot_proj, 
         plot_dist=plot_dist, 
@@ -136,16 +131,16 @@ def setup_plot(cfg: DictConfig) -> Callable:
 def setup_eval(cfg: DictConfig) -> Callable:
     """Set up eval function from config."""
     
-    def eval(model): 
+    def _eval(model): 
         device = cfg.device
         
         # Compute distance between measured/simulated projections.
         x_pred = model.sample(cfg.eval.size)
         x_pred = x_pred.type(torch.float32)
         x_pred = x_pred.to(device)
-        predictions = mf.sim.forward(x_pred, model.transforms, model.diagnostics)    
+        predictions = mf.simulate.forward(x_pred, model.transforms, model.diagnostics)    
 
-        discrepancy_function = mf.loss.get_loss_function(cfg.eval.discrepancy)
+        discrepancy_function = get_discrepancy_function(cfg.eval.discrepancy)
 
         discrepancy_vector = []
         for y_pred, y_meas in zip(unravel(predictions), unravel(model.measurements)):
@@ -160,7 +155,7 @@ def setup_eval(cfg: DictConfig) -> Callable:
 
         distance = None
         if distance_function is not None:
-            distribution = make_dist(cfg)
+            distribution = make_distribution(cfg)
             n_samples = cfg.eval.size
             x_true = distribution.sample(n_samples)    
             x_true = x_true.type(torch.float32)
@@ -176,4 +171,4 @@ def setup_eval(cfg: DictConfig) -> Callable:
         results = {"discrepancy": discrepancy, "distance": distance}
         return results
 
-    return eval
+    return _eval

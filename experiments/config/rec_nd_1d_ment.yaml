@@ -5,13 +5,13 @@ defaults:
     - train: ment
     - _self_
     
-d: 4
+ndim: 4
 meas:
     num: 50
     optics: isotropic
 model:
     mode: sample
-    samp:
-        res: 45
-        noise: 0.5
+    sampling:
+        res: 33
+        noise: 1.0
     

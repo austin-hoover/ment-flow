@@ -56,7 +56,7 @@ def setup_plot(cfg: DictConfig) -> Callable:
         limits=(2 * [(-cfg.eval.xmax, +cfg.eval.xmax)])
     )
     plot = mf.train.plot.PlotModel(
-        dist=make_distribution(cfg), 
+        distribution=make_distribution(cfg), 
         n_samples=cfg.plot.size, 
         plot_proj=plot_proj, 
         plot_dist=plot_dist,

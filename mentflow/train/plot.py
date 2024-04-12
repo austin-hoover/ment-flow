@@ -1,3 +1,4 @@
+from typing import Any
 from typing import Callable
 from typing import List
 
@@ -221,7 +222,7 @@ def plot_dist_corner(x1, x2, cmaps=None, colors=None, **kws):
     diag_kws = kws.pop("diag_kws", {})
     diag_kws.setdefault("lw", 1.5)
 
-    grid = psv.CornerGrid(d=x1.shape[1], corner=False)
+    grid = psv.CornerGrid(x1.shape[1], corner=False)
     grid.plot_points(
         x1, upper=False, cmap=cmaps[0], diag_kws=dict(color=colors[0], **diag_kws), **kws
     )
@@ -288,7 +289,7 @@ class PlotModel:
 
     def __init__(
         self,
-        dist: Callable,
+        distribution: Any,
         n_samples: int,
         plot_proj: List[Callable],
         plot_dist: List[Callable],
@@ -298,8 +299,8 @@ class PlotModel:
 
         Parameters
         ----------
-        dist : callable
-            Implements `dist.sample(n)` to draw samples from the true distribution.
+        distribution : Any
+            Implements `distribution.sample(n)` to generate n samples.
         n_samples : int
             Number of samples to plot.
         plot_dist: list[callable]
@@ -311,7 +312,7 @@ class PlotModel:
         device : str
             Name of torch device.
         """
-        self.dist = dist
+        self.distribution = distribution
         self.n_samples = n_samples
         self.plot_proj = plot_proj
         self.plot_dist = plot_dist
@@ -335,7 +336,7 @@ class PlotModel:
     def __call__(self, model):
         """Return list of figures."""
         # Generate particles.
-        x_true = self.dist.sample(self.n_samples)
+        x_true = self.distribution.sample(self.n_samples)
         x_true = self.send(x_true)
         x_pred = model.sample(x_true.shape[0])
         x_pred = self.send(x_pred)
@@ -358,12 +359,11 @@ class PlotModel:
             edges = []
             for index, transform in enumerate(model.transforms):
                 for diagnostic in model.diagnostics[index]:
-                    if type(diagnostic.edges) in [tuple, list]:
-                        edges.append([grab(e) for e in diagnostic.edges])
-                    else:
+                    if diagnostic.ndim == 1:
                         edges.append(grab(diagnostic.edges))
+                    else:
+                        edges.append([grab(e) for e in diagnostic.edges])
             for function in self.plot_proj:
                 fig, axs = function(y_meas, y_pred, edges)
                 figs.append(fig)
-
         return figs
