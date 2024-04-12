@@ -132,7 +132,7 @@ class MENTFlow(Model, nn.Module):
     def load(self, path, device=None):
         state = torch.load(path, map_location=device)
         try:
-            self.generator.load_state_dict(state["gen"])
+            self.generator.load_state_dict(state["generator"])
         except RuntimeError:
             raise RuntimeError("Error loading generative model. Architecture mismatch?")
 

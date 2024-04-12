@@ -1,3 +1,4 @@
+prior: "gaussian"
 prior_scale: 1.0
 discrepancy: "kld"
 entropy_estimator: "mc"

@@ -69,16 +69,16 @@ class NNGenerator(GenerativeModel):
         return (x, log_prob)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
-        return self.network(z)
+        return self.transform(z)
 
     def forward_steps(self, z: torch.Tensor) -> List[torch.Tensor]:
-        return [z, self.network(z)]
+        return [z, self.transform(z)]
 
     def sample_base(self, n: int) -> torch.Tensor:
         return self.base.rsample((n,))
 
     def to(self, device):
-        self.network = self.network.to(device)
+        self.transform = self.transform.to(device)
         # Need to send base to device... 
         return self
 

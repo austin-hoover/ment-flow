@@ -6,21 +6,20 @@ import proplot as pplt
 import torch
 
 import mentflow as mf
+from mentflow.utils import coords_from_edges
 from mentflow.utils import grab
 from mentflow.utils import unravel
 
 
-def set_proplot_rc():
-    """Set proplot style."""
+def set_proplot_rc() -> None:
     pplt.rc["cmap.discrete"] = False
-    # pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
-    pplt.rc["cmap.sequential"] = "viridis"
+    pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
     pplt.rc["cycle"] = "538"
     pplt.rc["grid"] = False
     pplt.rc["figure.facecolor"] = "white"
 
 
-def plot_image(image, coords=None, ax=None, **kws):
+def plot_image(image, coords=None, edges=None, ax=None, **kws):
     """Plot two-dimensional image."""
     kws.setdefault("ec", "None")
     kws.setdefault("linewidth", 0.0)
@@ -37,7 +36,14 @@ def plot_image(image, coords=None, ax=None, **kws):
         if np.count_nonzero(image):
             image + np.min(image[image > 0])
         image = np.ma.masked_less_equal(image, 0.0)
-    return ax.pcolormesh(coords[0], coords[1], image.T, **kws)
+
+    if edges is None:
+        if coords is not None:
+            edges = pplt.edges(coords)
+        else:
+            edges = [np.arange(s) for s in image.shape]
+            
+    return ax.pcolormesh(edges[0], edges[1], image.T, **kws)
 
 
 def plot_points(x, bins=None, limits=None, ax=None, **kws):
