@@ -6,7 +6,9 @@ defaults:
     - train: flow
     - _self_
 
-d: 2
+ndim: 2
+dist: 
+    name: rings
 meas:
     num: 4
     max_angle: 90.0

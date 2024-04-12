@@ -5,7 +5,13 @@ defaults:
     - train: ment
     - _self_
 
-d: 2
+ndim: 2
+dist: 
+    name: rings
+model: 
+    mode: sample
+train:
+    batch_size: 1_000_000
 meas:
     num: 4
     max_angle: 90.0

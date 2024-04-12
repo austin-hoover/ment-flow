@@ -5,7 +5,8 @@ defaults:
     - train: ment
     - _self_
 
-d: 2
+ndim: 2
+
 meas:
     min_angle: 0.0
     max_angle: 180.0

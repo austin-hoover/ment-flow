@@ -10,7 +10,7 @@ from experiments.setup import setup_ment_model
 from experiments.setup import train_ment_model
 from experiments.setup import generate_training_data
 from experiments.rec_2d.setup import make_diagnostics
-from experiments.rec_2d.setup import make_dist
+from experiments.rec_2d.setup import make_distribution
 from experiments.rec_2d.setup import setup_eval
 from experiments.rec_2d.setup import setup_plot
 
@@ -29,14 +29,14 @@ def make_transforms(cfg: DictConfig):
     strengths = np.linspace(strength_min, strength_max, cfg.meas.num)
     
     for strength in strengths:
-        multipole = mf.sim.MultipoleTransform(order=order, strength=strength)
+        multipole = mf.simulate.MultipoleTransform(order=order, strength=strength)
     
         angle = np.radians(cfg.meas.max_angle)
-        matrix = mf.sim.rotation_matrix(angle)
+        matrix = mf.simulate.rotation_matrix(angle)
         matrix = matrix.type(torch.float32)
-        rotation = mf.sim.LinearTransform(matrix)
+        rotation = mf.simulate.LinearTransform(matrix)
         
-        transform = mf.sim.CompositeTransform(multipole, rotation)
+        transform = mf.simulate.CompositeTransform(multipole, rotation)
         transforms.append(transform)
         
     return transforms
