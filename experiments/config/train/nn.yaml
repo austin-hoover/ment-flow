@@ -1,5 +1,5 @@
 epochs: 20
-iters: 300
+iters: 500
 batch_size: 10000
 
 penalty: 500.0
