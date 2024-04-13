@@ -17,20 +17,21 @@ from experiments.setup import train_mentflow_model
 from experiments.setup import setup_ment_model
 from experiments.setup import train_ment_model
 from experiments.setup import get_discrepancy_function
+from experiments.setup import setup_eval
 
 
 mf.train.plot.set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig) -> List[Callable]:    
-    rng = torch.Generator(device=device)
+    rng = torch.Generator(device=cfg.device)
     if cfg.seed is not None:
         rng.manual_seed(cfg.seed)
 
     if cfg.meas.optics == "isotropic":
 
         shape = (cfg.meas.num, cfg.ndim)
-        directions = torch.randn(shape, generator=rng, device=device)
+        directions = torch.randn(shape, generator=rng, device=cfg.device)
         directions = directions / torch.norm(directions, dim=1)[:, None]
         
         transforms = []
@@ -38,7 +39,7 @@ def make_transforms(cfg: DictConfig) -> List[Callable]:
             # We only care about the first dimension.
             M = torch.eye(cfg.ndim)
             M[0, :] = direction
-            M = M.float().to(device)
+            M = M.float().to(cfg.device)
             
             transform = mf.simulate.LinearTransform(M)
             transform = transform.to(cfg.device)
@@ -61,7 +62,7 @@ def make_diagnostics(cfg: DictConfig) -> List[mf.diagnostics.Diagnostic]:
         device=cfg.device,
         seed=cfg.seed,
     )
-    diagnostic = diagnostic.to(device)
+    diagnostic = diagnostic.to(cfg.device)
     diagnostics = [diagnostic,]  # one diagnostic per transform
     return diagnostics
 
@@ -125,49 +126,3 @@ def setup_plot(cfg: DictConfig) -> Callable:
         device=cfg.device,
     )
     return plot
-
-
-def setup_eval(cfg: DictConfig) -> Callable:
-    """Set up eval function from config."""
-    
-    def _eval(model): 
-        device = cfg.device
-        
-        # Compute distance between measured/simulated projections.
-        x_pred = model.sample(cfg.eval.size)
-        x_pred = x_pred.type(torch.float32)
-        x_pred = x_pred.to(device)
-        predictions = mf.simulate.forward(x_pred, model.transforms, model.diagnostics)    
-
-        discrepancy_function = get_discrepancy_function(cfg.eval.discrepancy)
-
-        discrepancy_vector = []
-        for y_pred, y_meas in zip(unravel(predictions), unravel(model.measurements)):
-            discrepancy = discrepancy_function(y_pred, y_meas)
-            discrepancy_vector.append(discrepancy)
-        discrepancy = sum(discrepancy_vector) / len(discrepancy_vector)
-
-        # Compute distance between true/predicted samples.   
-        distance_function = None
-        if cfg.eval.distance == "swd":
-            distance_function = mf.loss.SlicedWassersteindDistance(n_projections=50, p=2, device=device)
-
-        distance = None
-        if distance_function is not None:
-            distribution = make_distribution(cfg)
-            n_samples = cfg.eval.size
-            x_true = distribution.sample(n_samples)    
-            x_true = x_true.type(torch.float32)
-            x_true = x_true.to(device)
-            distance = distance_function(x_pred[:n_samples, :], x_true[:n_samples, :])
-            
-        # Print summary
-        print("")
-        print("disc(y_model, y_true) = {}".format(discrepancy))
-        if distance is not None:
-            print("dist(x_model, x_true) = {}".format(distance))
-        
-        results = {"discrepancy": discrepancy, "distance": distance}
-        return results
-
-    return _eval
