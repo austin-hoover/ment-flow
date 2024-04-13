@@ -4,6 +4,8 @@ from typing import List
 
 import numpy as np
 import proplot as pplt
+import psdist as ps
+import psdist.visualization as psv
 import torch
 
 import mentflow as mf
@@ -106,8 +108,8 @@ def plot_proj_2d(y_meas, y_pred, edges, maxcols=8, ymax=1.25, fig_kws=None, **kw
             if i < len(y_meas):
                 ax_index = row * ncols + col
                 scale = np.max(y_meas[i])
-                plot_image(y_meas[i] / scale, edges[i], ax=axs[ax_index], **kws)
-                plot_image(y_pred[i] / scale, edges[i], ax=axs[ax_index + ncols], **kws)
+                plot_image(y_meas[i] / scale, edges=edges[i], ax=axs[ax_index], **kws)
+                plot_image(y_pred[i] / scale, edges=edges[i], ax=axs[ax_index + ncols], **kws)
             i += 1
     return fig, axs
 
@@ -210,8 +212,6 @@ def plot_dist_radial_cdf(
 
 
 def plot_dist_corner(x1, x2, cmaps=None, colors=None, **kws):
-    import psdist.visualization as psv
-
     if cmaps is None:
         cmaps = [
             pplt.Colormap("blues"),
@@ -283,6 +283,42 @@ class PlotDistCorner:
     def __call__(self, x2, x1):
         return plot_dist_corner(x1, x2, **self.kws)
 
+
+class PlotDistRadialSlice2DProj:
+    def __init__(self, axis_view=(0, 1), slice_radii=None, **plot_kws):
+        self.axis_view = axis_view
+        self.slice_radii = slice_radii
+        if self.slice_radii is None:
+            self.slice_radii = np.linspace(3.0, 1.0, 4)
+        self.ncols = len(self.slice_radii)
+        
+        self.plot_kws = plot_kws
+        self.plot_kws.setdefault("limits", 2 * [(-4.0, 4.0)])
+        self.plot_kws.setdefault("bins", 75)
+        self.plot_kws.setdefault("mask", False)
+        self.plot_kws.setdefault("cmap", "mono")
+
+    def __call__(self, x1, x2):
+        assert x1.shape[1] == x2.shape[1]
+        assert x1.shape[1] > 2
+        
+        axis_slice = tuple(range(2, x1.shape[1]))
+
+        fig, axs = pplt.subplots(ncols=self.ncols, nrows=2, figwidth=(1.5 * self.ncols))
+        for j, slice_radius in enumerate(self.slice_radii):
+            for i, x in enumerate([x1, x2]):
+                x_slice = ps.points.slice_sphere(x, axis=axis_slice, rmin=0.0, rmax=slice_radius)
+                psv.points.plot2d(x_slice[:, self.axis_view], ax=axs[i, j], **self.plot_kws)
+            axs[0, j].format(title="$r_\perp < {:0.1f}$".format(slice_radius))
+        axs.format(
+            xlabel=r"$x$", 
+            ylabel=r"$x'$", 
+            suptitle=r"$\rho(x, x' \vert r_\perp)$",
+            rightlabels=["True", "Model"], 
+            rightlabels_kw=dict(rotation=-90),
+        )
+        return fig, axs
+        
 
 class PlotModel:
     """Visualize predicted distribution and projections."""
