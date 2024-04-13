@@ -6,13 +6,11 @@ defaults:
     - train: flow
     - _self_
 
+ndim: 4
 meas:
     optics: "corner"
-
 train:
     batch_size: 30000
     dmax: 0.0001
     penalty_scale: 1.5
     penalty_step: 50.0
-
-d: 4

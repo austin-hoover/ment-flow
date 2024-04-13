@@ -5,14 +5,11 @@ defaults:
     - train: ment
     - _self_
 
-d: 4
+ndim: 4
 meas:
     optics: corner
-
 model:
     mode: sample
-    samp:
-        res: 45
-        noise: 0.5
-    int:
-        res: 45
+    sampling:
+        res: 33
+        noise: 1.0

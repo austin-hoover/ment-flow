@@ -165,7 +165,7 @@ class Histogram2D(Histogram):
             bandwidth_x = 0.5
         if bandwidth_y is None:
             bandwidth_y = 0.5
-        
+
         self.register_buffer("edges_x", edges[0])
         self.register_buffer("edges_y", edges[1])
         self.register_buffer("coords_x", coords_from_edges(self.edges_x))
@@ -174,6 +174,7 @@ class Histogram2D(Histogram):
         self.register_buffer("resolution_y", self.edges_y[1] - self.edges_y[0])           
         self.register_buffer("bandwidth_x", bandwidth_x * self.resolution_x)  
         self.register_buffer("bandwidth_y", bandwidth_y * self.resolution_y)  
+        self.edges = (self.edges_x, self.edges_y)
         
     def project(self, x: torch.Tensor) -> torch.Tensor:
         return x[:, self.axis]

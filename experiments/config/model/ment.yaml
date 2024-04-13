@@ -9,4 +9,4 @@ integration:
 sampling:
     res: 250
     noise: 0.0
-verbose: false
+verbose: true

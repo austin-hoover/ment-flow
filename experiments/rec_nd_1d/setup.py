@@ -22,9 +22,7 @@ from experiments.setup import get_discrepancy_function
 mf.train.plot.set_proplot_rc()
 
 
-def make_transforms(cfg: DictConfig) -> List[Callable]:
-    device = torch.device(cfg.device)
-    
+def make_transforms(cfg: DictConfig) -> List[Callable]:    
     rng = torch.Generator(device=device)
     if cfg.seed is not None:
         rng.manual_seed(cfg.seed)
@@ -51,13 +49,8 @@ def make_transforms(cfg: DictConfig) -> List[Callable]:
         raise ValueError(f"Invalid cfg.meas.optics '{cfg.meas.optics}'")
 
 
-def make_diagnostics(cfg: DictConfig) -> List[mf.diagnostics.Diagnostic]:
-    device = torch.device(cfg.device)
-    
+def make_diagnostics(cfg: DictConfig) -> List[mf.diagnostics.Diagnostic]:    
     edges = torch.linspace(-cfg.meas.xmax, cfg.meas.xmax, cfg.meas.bins + 1)
-    edges = edges.type(torch.float32)
-    edges = edges.to(device)
-
     diagnostic = mf.diagnostics.Histogram1D(
         axis=0,
         edges=edges, 
@@ -105,6 +98,12 @@ def setup_plot(cfg: DictConfig) -> Callable:
         #     kind="step",
         #     lw=1.5,
         # ),
+
+        mf.train.plot.PlotDistRadialSlice2DProj(
+            axis_view=(0, 1), 
+            slice_radii=np.linspace(3.0, 1.0, 4),
+        ),
+        
         mf.train.plot.PlotDistCorner(
             bins=85,
             discrete=False, 
