@@ -5,4 +5,4 @@ outputs
 .DS_Store
 .idea
 *.egg-info
-
+*.sh
