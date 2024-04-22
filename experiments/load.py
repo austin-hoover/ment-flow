@@ -56,9 +56,9 @@ def load_ment_run(folder: str, device=None) -> Dict:
     return load_run(folder, device, load_model=load_ment_model)
 
 
-def load_run(folder: str, device=None, load_model=None) -> Dict:
-    cfg     = load_pickle_safe(os.path.join(folder, ".hydra/config.pickle"))
-    history = load_pickle_safe(os.path.join(folder, "history.pkl"))
+def load_run(folder: str, device=None, load_model=None, config_subdir="config") -> Dict:
+    cfg     = load_pickle_safe(os.path.join(folder, f"{config_subdir}/config.pickle"))
+    history = load_pickle_safe(os.path.join(folder, f"{config_subdir}/history.pkl"))
         
     checkpoints_folder = os.path.join(folder, "checkpoints")
     checkpoint_paths = os.listdir(checkpoints_folder)

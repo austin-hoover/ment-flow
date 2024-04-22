@@ -10,7 +10,7 @@ hydra:
             _target_: hydra.experimental.callbacks.PickleJobInfoCallback
         save_git_info:
             _target_: experiments.callback.GitSHACallback
-    output_subdir: ".hydra"
+    output_subdir: "config"
 
 ndim: 2
 
