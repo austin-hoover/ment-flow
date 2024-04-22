@@ -1,0 +1,17 @@
+defaults:
+    - base
+    - dist: dist_2d
+    - gen: nn
+    - model: nn
+    - train: nn
+    - _self_
+
+ndim: 2
+dist: 
+    name: rings
+meas:
+    num: 4
+    max_angle: 90.0
+    mult_order: 3
+    max_mult_strength: 1.5
+    xmax: 4.5

@@ -358,7 +358,7 @@ class MENT:
                 prediction = self.simulate(index, diag_index, **kws)
                 
                 # thresh = torch.max(prediction) * thresh
-                # prediction[prediction < thresh] = 0.0
+                prediction[prediction < thresh] = 0.0
 
                 shape = lagrange_function.values.shape
                 lagrange_function.values = torch.ravel(lagrange_function.values)
