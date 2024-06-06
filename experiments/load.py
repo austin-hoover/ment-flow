@@ -57,8 +57,8 @@ def load_ment_run(folder: str, device=None) -> Dict:
 
 
 def load_run(folder: str, device=None, load_model=None, config_subdir="config") -> Dict:
-    cfg     = load_pickle_safe(os.path.join(folder, f"{config_subdir}/config.pickle"))
-    history = load_pickle_safe(os.path.join(folder, f"{config_subdir}/history.pkl"))
+    cfg     = load_pickle_safe(os.path.join(folder, config_subdir, "config.pickle"))
+    history = load_pickle_safe(os.path.join(folder, "history.pkl"))
         
     checkpoints_folder = os.path.join(folder, "checkpoints")
     checkpoint_paths = os.listdir(checkpoints_folder)
