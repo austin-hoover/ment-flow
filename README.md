@@ -1,6 +1,6 @@
 # MENT-Flow
 
-Maximum-entropy tomography (MENT) using normalizing flows.
+Maximum-entropy tomography (MENT) using normalizing flows. Corresponding preprint: https://arxiv.org/abs/2406.00236.
 
 
 ## Installation
@@ -18,4 +18,4 @@ Experiments use [hydra](https://hydra.cc). Config files can be found in `/experi
 cd experiments/rec_2d/linear
 python train_flow.py device=mps dist.name=swissroll meas.num=7
 ```
-Results are stored in an `./outputs/{script_name}/{timestamp}/` directory created in the working directory, so it is best to `cd` to the script directoy before running. Runtime parameters are stored in `./outputs/{script_name}/{timestamp}/config/`.
+Results are stored in `./outputs/{script_name}/{timestamp}/` directory created in the working directory, so it's best to `cd` to the script directory before running. Runtime parameters are stored in `./outputs/{script_name}/{timestamp}/config/`.
