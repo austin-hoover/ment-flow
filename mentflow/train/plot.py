@@ -5,7 +5,7 @@ from typing import List
 import numpy as np
 import proplot as pplt
 import psdist as ps
-import psdist.visualization as psv
+import psdist.plot as psv
 import torch
 
 import mentflow as mf
@@ -308,7 +308,7 @@ class PlotDistRadialSlice2DProj:
         for j, slice_radius in enumerate(self.slice_radii):
             for i, x in enumerate([x1, x2]):
                 x_slice = ps.points.slice_sphere(x, axis=axis_slice, rmin=0.0, rmax=slice_radius)
-                psv.points.plot2d(x_slice[:, self.axis_view], ax=axs[i, j], **self.plot_kws)
+                psv.plot_points(x_slice[:, self.axis_view], ax=axs[i, j], **self.plot_kws)
             axs[0, j].format(title="$r_\perp < {:0.1f}$".format(slice_radius))
         axs.format(
             xlabel=r"$x$", 

@@ -7,7 +7,7 @@ allow-direct-references = true
 
 [project]
 name = "mentflow"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
     "gitpython",
     "hydra-core",
@@ -15,8 +15,7 @@ dependencies = [
     "numpy",
     "pandas",
     "pot",
-    "proplot @ git+https://github.com/austin-hoover/proplot@cfd060e2d6c922c7d80d21d23484454e11b17ab7",
-    "psdist @ git+https://github.com/austin-hoover/psdist@3abd7da8a8cfd83be859e7ad2fcab567dda1cea0",
+    "psdist @ git+https://github.com/austin-hoover/psdist@3a9409d4821f836abee4a1e9c43d4519d9a37e1e",
     "scipy>=1.10",
     "scikit-image",
     "torch",
