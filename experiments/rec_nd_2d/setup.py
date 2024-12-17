@@ -9,8 +9,10 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 import mentflow as mf
+from mentflow.train.plot import set_proplot_rc
 from mentflow.utils import unravel
 
+sys.path.append("../..")
 from experiments.setup import generate_training_data
 from experiments.setup import setup_mentflow_model
 from experiments.setup import train_mentflow_model
@@ -19,7 +21,7 @@ from experiments.setup import train_ment_model
 from experiments.setup import get_discrepancy_function
 
 
-mf.train.plot.set_proplot_rc()
+set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig):

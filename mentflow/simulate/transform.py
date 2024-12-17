@@ -6,6 +6,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import scipy.special
 
 
 def rotation_matrix(angle: float) -> torch.Tensor:
@@ -130,7 +131,7 @@ class MultipoleTransform(Transform):
         else:
             raise ValueError("MPS-compatible MultipoleTransform requires order <= 5.")
 
-        k = self.strength / np.math.factorial(self.order - 1)
+        k = self.strength / scipy.special.factorial(self.order - 1)
         if self.skew:
             U[:, 1] = X[:, 1] + k * zn_imag
             if X.shape[1] > 2:

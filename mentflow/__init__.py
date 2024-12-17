@@ -8,6 +8,5 @@ from . import ment
 from . import prior
 from . import sample
 from . import simulate
-from . import train
 from . import types_
 from . import utils

@@ -16,7 +16,8 @@ from mentflow.utils import unravel
 
 def set_proplot_rc() -> None:
     pplt.rc["cmap.discrete"] = False
-    pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
+    # pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
+    pplt.rc["cmap.sequential"] = "viridis"
     pplt.rc["cycle"] = "538"
     pplt.rc["grid"] = False
     pplt.rc["figure.facecolor"] = "white"
