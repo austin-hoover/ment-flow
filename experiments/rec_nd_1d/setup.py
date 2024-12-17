@@ -10,6 +10,12 @@ from omegaconf import OmegaConf
 
 import mentflow as mf
 from mentflow.train.plot import set_proplot_rc
+from mentflow.train.plot import PlotDistCorner
+from mentflow.train.plot import PlotDistRadialSlice2DProj
+from mentflow.train.plot import PlotDistRadialPDF
+from mentflow.train.plot import PlotDistRadialCDF
+from mentflow.train.plot import PlotModel
+from mentflow.train.plot import PlotProj1D
 from mentflow.utils import unravel
 
 sys.path.append("../..")
@@ -80,20 +86,20 @@ def make_distribution(cfg: DictConfig) -> mf.distributions.Distribution:
 def setup_plot(cfg: DictConfig) -> Callable:
     """Set up plot function from config."""
     plot_proj = [
-        mf.train.plot.PlotProj1D(
+        PlotProj1D(
             kind="line",
             maxcols=7,
         ),
     ]
     plot_dist = [
-        # mf.train.plot.PlotDistRadialPDF(
+        # PlotDistRadialPDF(
         #     fig_kws=None,
         #     bins=50,
         #     rmax=3.5,
         #     kind="step",
         #     lw=1.5,
         # ),
-        # mf.train.plot.PlotDistRadialCDF(
+        # PlotDistRadialCDF(
         #     fig_kws=None,
         #     bins=50,
         #     rmax=3.5,
@@ -101,12 +107,12 @@ def setup_plot(cfg: DictConfig) -> Callable:
         #     lw=1.5,
         # ),
 
-        mf.train.plot.PlotDistRadialSlice2DProj(
+        PlotDistRadialSlice2DProj(
             axis_view=(0, 1), 
             slice_radii=np.linspace(3.0, 1.0, 4),
         ),
         
-        mf.train.plot.PlotDistCorner(
+        PlotDistCorner(
             bins=85,
             discrete=False, 
             limits=(cfg.ndim * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
@@ -119,7 +125,7 @@ def setup_plot(cfg: DictConfig) -> Callable:
             diag_kws=dict(kind="line", lw=1.30),
         ),
     ]
-    plot = mf.train.plot.PlotModel(
+    plot = PlotModel(
         distribution=make_distribution(cfg), 
         n_samples=cfg.plot.size, 
         plot_proj=plot_proj, 

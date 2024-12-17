@@ -10,6 +10,9 @@ from omegaconf import OmegaConf
 
 import mentflow as mf
 from mentflow.utils import unravel
+from mentflow.train.plot import PlotDist2D
+from mentflow.train.plot import PlotProj1D
+from mentflow.train.plot import PlotModel
 
 from experiments.setup import get_discrepancy_function
 

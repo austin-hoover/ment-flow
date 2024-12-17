@@ -4,7 +4,7 @@ import torch
 from omegaconf import DictConfig
 
 import mentflow as mf
-import mentflow.train
+from mentflow.train.plot import set_proplot_rc
 
 sys.path.append("../../..")
 from experiments.setup import setup_mentflow_model
@@ -18,7 +18,7 @@ from experiments.rec_2d.setup import setup_eval
 from experiments.rec_2d.setup import setup_plot
 
 
-mentflow.train.plot.set_proplot_rc()
+set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig):

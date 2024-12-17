@@ -6,7 +6,6 @@ from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 import mentflow as mf
-import mentflow.train
 
 import setup
 
