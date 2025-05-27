@@ -48,14 +48,14 @@ Several Jupyter notebooks are included to evalate the trained models.
 
 ## Analysis 
 
-The following commands will run all experiments reported in the paper.
+The following command will run all experiments reported in the paper.
 
 ```
 cd experiments
-./run.sh
+./run.sh <device>
 ```
 
-Then run the following to make the plots:
+My computer uses the "mps" device, so I run `./run.sh mps`. Then run the following to make the plots:
 
 ```
 cd analysis
