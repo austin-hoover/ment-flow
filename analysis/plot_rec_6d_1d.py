@@ -122,10 +122,11 @@ for run_dir in run_dirs:
             
             # Corner plot
             # ----------------------------------------------------------------------------------
+            
             with uplt.rc.context(fontsmallsize="xx-large"):                
-                grid = psv.CornerGrid(cfg.ndim, corner=False, figwidth=6.5, space=1.0)
+                grid = psv.CornerGrid(ndim=cfg.ndim, corner=False, figwidth=6.5, space=1.0)
                 for i, x in enumerate([x1, x2]):
-                    grid.plot_points(
+                    grid.plot(
                         x,
                         lower=i,
                         upper=(not i),
@@ -147,6 +148,7 @@ for run_dir in run_dirs:
     
             # Simulated measurements
             # ----------------------------------------------------------------------------------
+            
             maxcols = 9
             maxrows = 11
             figwidth = 4.5
@@ -161,6 +163,7 @@ for run_dir in run_dirs:
             y_meas = [grab(meas) for meas in unravel(model.measurements)]
             y_pred = [grab(pred) for pred in unravel(predictions)]
             edges = [grab(diag.edges) for diag in unravel(model.diagnostics)]
+            coords = [grab(diag.coords) for diag in unravel(model.diagnostics)]
         
             ncols = min(len(y_meas), maxcols)
             nrows = int(np.ceil(len(y_meas) / ncols))
@@ -179,8 +182,8 @@ for run_dir in run_dirs:
                 if index < len(axs):
                     ax = axs[index]
                     scale = np.max(y_meas[index])
-                    psv.plot_profile(y_meas[index] / scale, edges=edges[index], ax=ax, color=colors[0], lw=1.25, ls="-")
-                    psv.plot_profile(y_pred[index] / scale, edges=edges[index], ax=ax, color=colors[1], lw=0.90, ls="-")
+                    ax.plot(coords[index], y_meas[index] / scale, color=colors[0], lw=1.25, ls="-")
+                    ax.plot(coords[index], y_pred[index] / scale, color=colors[1], lw=0.90, ls="-")
             axs.format(ymax=1.25, ymin=0.0)
             axs.format(suptitle=model_name.upper(), suptitle_kw=dict(fontsize="x-large", fontweight="bold"))
 
@@ -193,6 +196,7 @@ for run_dir in run_dirs:
 
             # Spherical slice (with diagram)
             # ----------------------------------------------------------------------------------
+            
             axis_view = (0, 1)  # projection axis
             batch_size = 1_000_000
             n_batches = 10
@@ -224,7 +228,7 @@ for run_dir in run_dirs:
                     for _ in trange(n_batches):
                         x = _dist.sample(batch_size)
                         x = grab(x)
-                        x = ps.points.slice_sphere(x, axis=axis_slice, rmin=0.0, rmax=slice_radius)
+                        x = ps.slice_sphere(x, axis=axis_slice, rmin=0.0, rmax=slice_radius)
                         hist_batch, _ = np.histogramdd(x[:, axis_view], edges)
                         hist += hist_batch
                     hist = hist / np.sum(hist)

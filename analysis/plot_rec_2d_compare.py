@@ -147,7 +147,6 @@ def plot_compare_all_profiles(
         ncols=n_cols,
         share=False,
         height_ratios=(n_models * [1.0] + max_n_meas * [height_ratio]),
-
         space=1.0,
         figwidth=10.0,
     )
@@ -216,7 +215,6 @@ def plot_compare_all_profiles(
                         hist,
                         edges=edges,
                         ax=axs[4 + meas_index, run_index],
-                        # alpha=np.linspace(0.25, 1.0, n_models)[i],
                         **lineplot_kws[i]
                     )
 
