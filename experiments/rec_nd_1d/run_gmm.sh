@@ -5,6 +5,14 @@
 # sphere.
 
 
+# Check if device is provided in command line argument
+if [ $# -gt 0 ]; then
+    device="$1"
+else
+    device=cpu
+fi
+
+
 # Settings
 ndim=6;
 seed=0;
@@ -12,15 +20,7 @@ meas_num_list=(25 100);
 meas_bins=64;
 batch_size=25000;
 dist_name="gaussian_mixture";
-models=("flow" "nn");
-
-
-# Check if device is provided in command line argument
-if [ $# -gt 0 ]; then
-    device="$1"
-else
-    device=cpu
-fi
+models=("nn" "flow");
 
 
 # Run training loop

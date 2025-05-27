@@ -4,6 +4,15 @@
 # numbers of projections. The projection axes are selected randomly from the unit
 # sphere.
 
+
+# Check if device is provided in command line argument
+if [ $# -gt 0 ]; then
+    device="$1"
+else
+    device=cpu
+fi
+
+
 # Settings
 ndim=6;
 seed=2;
@@ -12,15 +21,7 @@ meas_bins=64;
 batch_size=25000;
 dist_name="rings";
 prior_scale=1.0;
-#models=("nn" "flow");
-models=("flow");
-
-# Check if device is provided in command line argument
-if [ $# -gt 0 ]; then
-    device="$1"
-else
-    device=cpu
-fi
+models=("nn" "flow");
 
 
 # Run training loop
