@@ -7,14 +7,30 @@ Source code for the paper [High-dimensional maximum-entropy phase space tomograp
 
 ## Installation
 
+Create conda environment:
+
+```
+conda create -n ment-flow python=3.11.5
+conda activate ment-flow
+```
+
+Install the `mentflow` package via pip. This will also install dependencies.
+
 ```
 pip install -e .
+```
+
+To create a Jupyter kernel for this conda environment:
+
+```
+pip install ipykernel
+python -m ipykernel install --user --name ment-flow
 ```
 
 
 ## Experiments
 
-Install additional dependencies:
+Install additional dependencies to run experiments:
 
 ```
 pip install -e '.[experiments]'
@@ -27,8 +43,10 @@ python train_flow.py device=mps dist.name=swissroll meas.num=7
 ```
 Results are stored in `./outputs/{script_name}/{timestamp}/` directory created in the working directory. Runtime parameters are stored in `./outputs/{script_name}/{timestamp}/config/`.
 
+Several Jupyter notebooks are included to evalate the trained models.
 
-## Paper 
+
+## Analysis 
 
 The following commands will run all experiments reported in the paper.
 
@@ -43,8 +61,3 @@ Then run the following to make the plots:
 cd analysis
 ./run.sh
 ```
-
-
-## Citation
-
-This repository is archived on [Zenodo]().
