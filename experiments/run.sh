@@ -5,7 +5,11 @@ set -x
 # experiments are analyzed in the ./analysis directory.
 
 # Set pytorch device (cpu, mps, cuda)
-device=mps
+if [ $# -gt 0 ]; then
+    device="$1"
+else
+    device="cpu"
+fi
 
 # Run 6D experiments
 cd ./rec_nd_1d
