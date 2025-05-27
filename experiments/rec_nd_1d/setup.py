@@ -1,24 +1,19 @@
 """Setup for n:1 reconstructions."""
+import os
+import sys
 from typing import Callable
 from typing import List
 
 import numpy as np
 import torch
-import proplot as pplt
+import ultraplot as uplt
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
 import mentflow as mf
-from mentflow.train.plot import set_proplot_rc
-from mentflow.train.plot import PlotDistCorner
-from mentflow.train.plot import PlotDistRadialSlice2DProj
-from mentflow.train.plot import PlotDistRadialPDF
-from mentflow.train.plot import PlotDistRadialCDF
-from mentflow.train.plot import PlotModel
-from mentflow.train.plot import PlotProj1D
 from mentflow.utils import unravel
 
-sys.path.append("../..")
+sys.path.append("../../")
 from experiments.setup import generate_training_data
 from experiments.setup import setup_mentflow_model
 from experiments.setup import train_mentflow_model
@@ -27,7 +22,7 @@ from experiments.setup import train_ment_model
 from experiments.setup import get_discrepancy_function
 
 
-set_proplot_rc()
+mf.train.plot.set_proplot_rc()
 
 
 def make_transforms(cfg: DictConfig) -> List[Callable]:    
@@ -86,46 +81,31 @@ def make_distribution(cfg: DictConfig) -> mf.distributions.Distribution:
 def setup_plot(cfg: DictConfig) -> Callable:
     """Set up plot function from config."""
     plot_proj = [
-        PlotProj1D(
+        mf.train.plot.PlotProj1D(
             kind="line",
             maxcols=7,
         ),
     ]
     plot_dist = [
-        # PlotDistRadialPDF(
-        #     fig_kws=None,
-        #     bins=50,
-        #     rmax=3.5,
-        #     kind="step",
-        #     lw=1.5,
-        # ),
-        # PlotDistRadialCDF(
-        #     fig_kws=None,
-        #     bins=50,
-        #     rmax=3.5,
-        #     kind="step",
-        #     lw=1.5,
-        # ),
-
-        PlotDistRadialSlice2DProj(
+        mf.train.plot.PlotDistRadialSlice2DProj(
             axis_view=(0, 1), 
             slice_radii=np.linspace(3.0, 1.0, 4),
         ),
         
-        PlotDistCorner(
+        mf.train.plot.PlotDistCorner(
             bins=85,
             discrete=False, 
             limits=(cfg.ndim * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
             cmaps=[
-                pplt.Colormap("mono", right=0.95),
-                pplt.Colormap("mono", right=0.95),
+                uplt.Colormap("mono", right=0.95),
+                uplt.Colormap("mono", right=0.95),
             ],
             colors=["black", "black"],
             mask=True,
             diag_kws=dict(kind="line", lw=1.30),
         ),
     ]
-    plot = PlotModel(
+    plot = mf.train.plot.PlotModel(
         distribution=make_distribution(cfg), 
         n_samples=cfg.plot.size, 
         plot_proj=plot_proj, 
