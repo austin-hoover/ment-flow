@@ -20,13 +20,6 @@ Install the `mentflow` package via pip. This will also install dependencies.
 pip install -e .
 ```
 
-To create a Jupyter kernel for this conda environment:
-
-```
-pip install ipykernel
-python -m ipykernel install --user --name ment-flow
-```
-
 
 ## Experiments
 
@@ -43,7 +36,12 @@ python train_flow.py device=mps dist.name=swissroll meas.num=7
 ```
 Results are stored in `./outputs/{script_name}/{timestamp}/` directory created in the working directory. Runtime parameters are stored in `./outputs/{script_name}/{timestamp}/config/`.
 
-Several Jupyter notebooks are included to evalate the trained models.
+Several Jupyter notebooks are included to evalate the trained models. To add the conda environment as a jupyter kernel:
+
+```
+pip install ipykernel
+python -m ipykernel install --user --name ment-flow
+```
 
 
 ## Analysis 
