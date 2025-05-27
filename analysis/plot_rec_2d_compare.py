@@ -39,7 +39,7 @@ uplt.rc["grid"] = False
 
 path = pathlib.Path(__file__)
 
-input_dir = "../experiments/rec_2d/outputs/"
+input_dir = "../experiments/rec_2d/linear/outputs/"
 output_dir = "./outputs"
 os.makedirs(output_dir, exist_ok=True)
 
@@ -110,6 +110,7 @@ for key in ["flow", "nn", "ment"]:
     models[key] = model
 
     print(f"setup {key} architecture")
+
 
 
 # Compare all models and runs
@@ -208,15 +209,11 @@ def plot_compare_all_profiles(
                     u = transform(x)
                     u = grab(u)
                         
-                    hist, edges = np.histogram(u[:, 0], bins=150, range=(-xmax, xmax), density=True)
-                    hist = hist / np.max(hist)
-                                        
-                    psv.plot_profile(
-                        hist,
-                        edges=edges,
-                        ax=axs[4 + meas_index, run_index],
-                        **lineplot_kws[i]
-                    )
+                    values, edges = np.histogram(u[:, 0], bins=150, range=(-xmax, xmax), density=True)
+                    values = values / np.max(values)
+                    coords = 0.5 * (edges[:-1] + edges[1:])
+                    ax = axs[4 + meas_index, run_index]
+                    ax.plot(coords, values, **lineplot_kws[i])                                        
 
             ## Draw integration lines.
             angles = np.linspace(cfg.meas.min_angle, cfg.meas.max_angle, cfg.meas.num, endpoint=False)
