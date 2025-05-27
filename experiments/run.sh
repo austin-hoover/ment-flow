@@ -11,14 +11,14 @@ else
     device="cpu"
 fi
 
-# Run 6D experiments
-cd ./rec_nd_1d
-rm -rf outputs
-./run.sh $device
-cd ..
-
 # Run 2D experiments
 cd ./rec_2d/linear
 rm -rf outputs
 ./run.sh $device
 cd ../..
+
+# Run 6D experiments
+cd ./rec_nd_1d
+rm -rf outputs
+./run.sh $device
+cd ..
