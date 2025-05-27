@@ -8,8 +8,6 @@ Source code for the paper [High-dimensional maximum-entropy phase space tomograp
 ## Installation
 
 ```
-git clone https://github.com/austin-hoover/ment-flow.git
-cd ment-flow
 pip install -e .
 ```
 
