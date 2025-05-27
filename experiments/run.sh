@@ -4,12 +4,8 @@ set -x
 # This script runs all experiments for the paper. The outputs of the 
 # experiments are analyzed in the ./analysis directory.
 
-# Check if device is provided in command line argument
-if [ $# -gt 0 ]; then
-    device="$1"
-else
-    device="cpu"
-fi
+# Set pytorch device (cpu, mps, cuda)
+device=mps
 
 # Run 6D experiments
 cd ./rec_nd_1d
