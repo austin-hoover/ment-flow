@@ -25,6 +25,17 @@ def load_pickle_safe(path):
     return None
 
 
+def list_contents(folder, not_starts_with=".", sort=True):
+    """List file names in folder."""
+    names = os.listdir(folder)
+    if sort:
+        names = sorted(names)
+    if not_starts_with:
+        names = [name for name in names if not name.startswith(not_starts_with)]
+    paths = [os.path.join(folder, name) for name in names]
+    return paths
+
+
 def epoch_and_iteration_number(checkpoint_filename):
     """Return epoch and iteration number from filename '{filename}_{epoch}_{iteration}'."""
     checkpoint_filename = checkpoint_filename.split(".pt")[0]

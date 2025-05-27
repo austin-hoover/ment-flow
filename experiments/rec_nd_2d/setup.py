@@ -1,10 +1,13 @@
 """Setup for n:2 reconstructions."""
+import math
+import os
+import sys
 from typing import Callable
 from typing import List
 
 import numpy as np
 import torch
-import proplot as pplt
+import ultraplot as uplt
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 
@@ -113,8 +116,8 @@ def setup_plot(cfg: DictConfig) -> Callable:
             discrete=False, 
             limits=(cfg.ndim * [(-cfg.eval.xmax, +cfg.eval.xmax)]),
             cmaps=[
-                pplt.Colormap("mono", right=0.95),
-                pplt.Colormap("mono", right=0.95),
+                uplt.Colormap("mono", right=0.95),
+                uplt.Colormap("mono", right=0.95),
             ],
             colors=["black", "black"],
             mask=True,

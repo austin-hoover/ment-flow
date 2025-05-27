@@ -3,10 +3,10 @@ from typing import Callable
 from typing import List
 
 import numpy as np
-import proplot as pplt
 import psdist as ps
 import psdist.plot as psv
 import torch
+import ultraplot as uplt
 
 import mentflow as mf
 from mentflow.utils import coords_from_edges
@@ -15,12 +15,12 @@ from mentflow.utils import unravel
 
 
 def set_proplot_rc() -> None:
-    pplt.rc["cmap.discrete"] = False
-    # pplt.rc["cmap.sequential"] = pplt.Colormap("dark_r", space="hpl")
-    pplt.rc["cmap.sequential"] = "viridis"
-    pplt.rc["cycle"] = "538"
-    pplt.rc["grid"] = False
-    pplt.rc["figure.facecolor"] = "white"
+    uplt.rc["cmap.discrete"] = False
+    # uplt.rc["cmap.sequential"] = uplt.Colormap("dark_r", space="hpl")
+    uplt.rc["cmap.sequential"] = "viridis"
+    uplt.rc["cycle"] = "538"
+    uplt.rc["grid"] = False
+    uplt.rc["figure.facecolor"] = "white"
 
 
 def plot_image(image, coords=None, edges=None, ax=None, **kws):
@@ -43,7 +43,7 @@ def plot_image(image, coords=None, edges=None, ax=None, **kws):
 
     if edges is None:
         if coords is not None:
-            edges = pplt.edges(coords)
+            edges = uplt.edges(coords)
         else:
             edges = [np.arange(s) for s in image.shape]
             
@@ -76,7 +76,7 @@ def plot_proj_1d(y_meas, y_pred, edges, maxcols=7, height=1.3, colors=None, ymax
     nrows = int(np.ceil(len(y_meas) / ncols))
     figheight = height * nrows
     figwidth = 1.75 * ncols
-    fig, axs = pplt.subplots(ncols=ncols, nrows=nrows, figheight=figheight, figwidth=figwidth)
+    fig, axs = uplt.subplots(ncols=ncols, nrows=nrows, figheight=figheight, figwidth=figwidth)
 
     for index in range(len(y_meas)):
         ax = axs[index]
@@ -101,7 +101,7 @@ def plot_proj_2d(y_meas, y_pred, edges, maxcols=8, ymax=1.25, fig_kws=None, **kw
     ncols = min(len(y_meas), maxcols)
     nrows = 2 * int(np.ceil(len(y_meas) / ncols))
     figwidth = min(1.75 * ncols, 10.0)
-    fig, axs = pplt.subplots(ncols=ncols, nrows=nrows, figwidth=figwidth, **fig_kws)
+    fig, axs = uplt.subplots(ncols=ncols, nrows=nrows, figwidth=figwidth, **fig_kws)
 
     i = 0
     for row in range(0, nrows, 2):
@@ -124,7 +124,7 @@ def plot_dist_2d(x1, x2, fig_kws=None, **kws):
     fig_kws.setdefault("space", 0.0)
     fig_kws.setdefault("share", False)
 
-    fig, axs = pplt.subplots(ncols=2, **fig_kws)
+    fig, axs = uplt.subplots(ncols=2, **fig_kws)
     plot_points(x1, ax=axs[0], **kws)
     plot_points(x2, ax=axs[1], **kws)
     return fig, axs
@@ -159,7 +159,7 @@ def plot_dist_radial_pdf(
                 rmin=rmin, rmax=rmax, d=x2.shape[1]
             )
 
-    fig, ax = pplt.subplots(**fig_kws)
+    fig, ax = uplt.subplots(**fig_kws)
     scale = hist_r1.max()
     plot_profile(hist_r1 / scale, bin_edges, ax=ax, color=colors[0], **kws)
     plot_profile(hist_r2 / scale, bin_edges, ax=ax, color=colors[1], **kws)
@@ -205,7 +205,7 @@ def plot_dist_radial_cdf(
     cdf_r1 = cdf_r1 / cdf_r1[-1]
     cdf_r2 = cdf_r2 / cdf_r2[-1]
 
-    fig, ax = pplt.subplots(**fig_kws)
+    fig, ax = uplt.subplots(**fig_kws)
     plot_profile(cdf_r1, bin_edges, ax=ax, color=colors[0], **kws)
     plot_profile(cdf_r2, bin_edges, ax=ax, color=colors[1], **kws)
     ax.format(xmin=0.0, ymax=ymax, ymin=0.0)
@@ -215,15 +215,15 @@ def plot_dist_radial_cdf(
 def plot_dist_corner(x1, x2, cmaps=None, colors=None, **kws):
     if cmaps is None:
         cmaps = [
-            pplt.Colormap("blues"),
-            pplt.Colormap("reds"),
+            uplt.Colormap("blues"),
+            uplt.Colormap("reds"),
         ]
     if colors is None:
         colors = ["blue6", "red6"]
     diag_kws = kws.pop("diag_kws", {})
     diag_kws.setdefault("lw", 1.5)
 
-    grid = psv.CornerGrid(x1.shape[1], corner=False)
+    grid = psv.CornerGrid(ndim=x1.shape[1], corner=False)
     grid.plot_points(
         x1, upper=False, cmap=cmaps[0], diag_kws=dict(color=colors[0], **diag_kws), **kws
     )
@@ -305,11 +305,11 @@ class PlotDistRadialSlice2DProj:
         
         axis_slice = tuple(range(2, x1.shape[1]))
 
-        fig, axs = pplt.subplots(ncols=self.ncols, nrows=2, figwidth=(1.5 * self.ncols))
+        fig, axs = uplt.subplots(ncols=self.ncols, nrows=2, figwidth=(1.5 * self.ncols))
         for j, slice_radius in enumerate(self.slice_radii):
             for i, x in enumerate([x1, x2]):
-                x_slice = ps.points.slice_sphere(x, axis=axis_slice, rmin=0.0, rmax=slice_radius)
-                psv.plot_points(x_slice[:, self.axis_view], ax=axs[i, j], **self.plot_kws)
+                x_slice = ps.slice_sphere(x, axis=axis_slice, rmin=0.0, rmax=slice_radius)
+                psv.plot(x_slice[:, self.axis_view], ax=axs[i, j], **self.plot_kws)
             axs[0, j].format(title="$r_\perp < {:0.1f}$".format(slice_radius))
         axs.format(
             xlabel=r"$x$", 
